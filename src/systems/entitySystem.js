@@ -670,3 +670,276 @@ export function makeEntranceFromDef(def, deps) {
     }
   );
 }
+
+export function findHouseDefById(houseId, deps) {
+  const {
+    TOWN_HOUSES,
+    SHADOW_TOWN_HOUSES,
+  } = deps;
+
+  return [...TOWN_HOUSES, ...SHADOW_TOWN_HOUSES].find(
+    house => house.houseId === houseId
+  ) || null;
+}
+
+export function makeHouseEntranceEntity(house, transitionId = null, deps) {
+  const {
+    makeHouseDoorRectFn,
+    makeEntranceEntityFn,
+    HOUSE_TRANSITION_IDS,
+  } = deps;
+
+  const rect = makeHouseDoorRectFn(house);
+  const houseId = house.houseId;
+
+  return makeEntranceEntityFn(
+    'houseEntrance',
+    rect.x,
+    rect.y,
+    rect.w,
+    rect.h,
+    rect.exitDir,
+    null,
+    {
+      hitbox: { x: 0, y: 0, w: rect.w, h: rect.h },
+      transitionId: transitionId || HOUSE_TRANSITION_IDS[houseId],
+    }
+  );
+}
+
+export function makeHouseDoorRect(house, deps) {
+  const {
+    TILE_RENDER,
+    tileToPx,
+  } = deps;
+
+  const w = Math.round(TILE_RENDER * 0.34);
+  const h = Math.round(TILE_RENDER * 0.30);
+  const doorOffsetX = 62;
+
+  const drawW = house.drawW || house.width;
+  const drawH = house.drawH || house.height;
+
+  const normalizedHouse = {
+    x: house.drawW ? house.x : tileToPx(house.x),
+    y: house.drawH ? house.y : tileToPx(house.y) - drawH / 2,
+    drawW,
+    drawH,
+  };
+
+  const doorX = normalizedHouse.x;
+  const doorY = normalizedHouse.y + normalizedHouse.drawH / 2;
+
+  return {
+    x: Math.round(doorX - w / 2 + doorOffsetX),
+    y: Math.round(doorY - h / 2 - 4),
+    w,
+    h,
+    exitDir: 'down',
+  };
+}
+
+export function addNpcEntities(deps) {
+  const {
+    entities,
+    getCurrentMapDef,
+    makeNpcEntityFn,
+  } = deps;
+
+  for (const npc of getCurrentMapDef().npcs || []) {
+    entities.push(makeNpcEntityFn(npc));
+  }
+}
+
+export function addSignEntities(deps) {
+  const {
+    entities,
+    getCurrentMapDef,
+    makeSignEntityFn,
+  } = deps;
+
+  for (const sign of getCurrentMapDef().signs || []) {
+    entities.push(
+      makeSignEntityFn(
+        sign.x,
+        sign.y,
+        sign.lines,
+        sign.flagKey,
+        sign.options || {}
+      )
+    );
+  }
+}
+
+export function addChestEntities(deps) {
+  const {
+    entities,
+    getCurrentMapDef,
+    makeChestEntityFn,
+  } = deps;
+
+  for (const chest of getCurrentMapDef().chests || []) {
+    entities.push(
+      makeChestEntityFn(
+        chest.x,
+        chest.y,
+        chest.options || {}
+      )
+    );
+  }
+}
+
+export function addSpecialEventEntities(deps) {
+  const {
+    entities,
+    runtimeState,
+    flags,
+
+    fieldMap,
+    dungeonMap,
+    cursedForestMap,
+    castleMap,
+    leafaForestMap,
+
+    LEAFA_RESCUE_ENEMY_NPCS,
+
+    isLeafaRescueAmbushActive,
+    makeLeafaForestEntranceEntityFn,
+    makeEnemyNpcEntityFn,
+    makeLeafaRescueEntityFn,
+    makeBossEntityFn,
+    makeForestBossEntityFn,
+    makeDemonGeneralEntityFn,
+    makeDemonLordEntityFn,
+  } = deps;
+
+  if (runtimeState.currentMap === fieldMap) {
+    entities.push(makeLeafaForestEntranceEntityFn());
+  }
+
+  if (runtimeState.currentMap === leafaForestMap) {
+    if (isLeafaRescueAmbushActive()) {
+      for (const enemyNpc of LEAFA_RESCUE_ENEMY_NPCS) {
+        entities.push(makeEnemyNpcEntityFn(enemyNpc));
+      }
+
+      entities.push(makeLeafaRescueEntityFn());
+    } else if (flags.heardLeafaRumor && !flags.leafaRescueDone) {
+      entities.push(makeLeafaRescueEntityFn());
+    }
+  }
+
+  if (runtimeState.currentMap === dungeonMap && !flags.defeatedDarkKnight) {
+    entities.push(makeBossEntityFn());
+  }
+
+  if (runtimeState.currentMap === cursedForestMap && !flags.defeatedForestBoss) {
+    entities.push(makeForestBossEntityFn());
+  }
+
+  if (runtimeState.currentMap === castleMap) {
+    if (!flags.defeatedDemonGeneral) {
+      entities.push(makeDemonGeneralEntityFn());
+    }
+
+    if (!flags.defeatedDemonLord) {
+      entities.push(makeDemonLordEntityFn());
+    }
+  }
+}
+
+export function updateEntities(deps) {
+  const {
+    syncEntities,
+    entities,
+  } = deps;
+
+  syncEntities();
+
+  for (const entity of entities) {
+    if (typeof entity.update === 'function') {
+      entity.update();
+    }
+  }
+}
+
+export function drawEntities(deps) {
+  const {
+    syncEntities,
+    entities,
+    getCollisionBox,
+    drawDecorEntity,
+    drawSignEntity,
+  } = deps;
+
+  syncEntities();
+
+  const sorted = entities
+    .slice()
+    .sort((a, b) => getCollisionBox(a).y - getCollisionBox(b).y);
+
+  for (const entity of sorted) {
+    if (entity.type === 'house' && typeof entity.draw === 'function') {
+      entity.draw();
+    }
+  }
+
+  for (const entity of sorted) {
+    if (entity.type === 'decor') {
+      drawDecorEntity(entity);
+    }
+  }
+
+  for (const entity of sorted) {
+    if (entity.type === 'sign') {
+      drawSignEntity(entity);
+    }
+  }
+
+  for (const entity of sorted) {
+    if (entity.type === 'chest' && typeof entity.draw === 'function') {
+      entity.draw();
+    }
+  }
+
+  for (const entity of sorted) {
+    if (entity.type === 'decor' || entity.type === 'house' || entity.type === 'chest') {
+      continue;
+    }
+
+    if (entity.type === 'sign') {
+      continue;
+    }
+
+    if (typeof entity.draw === 'function') {
+      entity.draw();
+    }
+  }
+}
+
+export function syncEntities(deps) {
+  const {
+    hero,
+    setupHeroEntity,
+    setEntities,
+
+    addHouseEntities,
+    addDecorEntities,
+    addNpcEntities,
+    addSignEntities,
+    addChestEntities,
+    addSpecialEventEntities,
+    addEntranceEntities,
+  } = deps;
+
+  setupHeroEntity(hero);
+  setEntities([hero]);
+
+  addHouseEntities();
+  addDecorEntities();
+  addNpcEntities();
+  addSignEntities();
+  addChestEntities();
+  addSpecialEventEntities();
+  addEntranceEntities();
+}

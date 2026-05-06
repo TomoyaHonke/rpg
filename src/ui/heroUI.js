@@ -86,3 +86,19 @@ export function drawHeroAtFoot(ctx, footX, footY, dir, deps) {
 
   drawHero(dx, dy, HERO_SC, dir);
 }
+
+export function drawHeroEntity(ctx, deps) {
+  const {
+    hero,
+    renderCamera,
+    TILE_RENDER,
+    drawHeroAtFoot,
+  } = deps;
+
+  const camCol = renderCamera.col;
+  const camRow = renderCamera.row;
+  const heroSX = Math.round(hero.drawX - camCol * TILE_RENDER);
+  const heroSY = Math.round(hero.drawY - camRow * TILE_RENDER);
+
+  drawHeroAtFoot(heroSX + TILE_RENDER / 2, heroSY + TILE_RENDER - 4);
+}

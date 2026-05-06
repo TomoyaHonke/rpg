@@ -57,3 +57,86 @@ export function getCurrentMapId(deps) {
 
   return 'field';
 }
+
+export function resolveTransitionAttempt(transitionId, deps) {
+  const {
+    getTransitionDef,
+    flags,
+  } = deps;
+
+  const transition = getTransitionDef(transitionId);
+
+  if (!transition) {
+    return {
+      ok: false,
+      transition: null,
+      message: null,
+    };
+  }
+
+  if (transition.requiredFlag && !flags[transition.requiredFlag]) {
+    return {
+      ok: false,
+      transition,
+      message: transition.blockedMessage || null,
+    };
+  }
+
+  if (typeof transition.blockCondition === 'function') {
+    const message = transition.blockCondition();
+
+    if (message) {
+      return {
+        ok: false,
+        transition,
+        message,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    transition,
+    message: null,
+  };
+}
+
+export function resolveTransitionDestination(transition, entranceEntity, deps) {
+  const {
+    resolveValue,
+    getMapTilesById,
+  } = deps;
+
+  const toMapId = resolveValue(transition.toMap, entranceEntity);
+  const spawnX = resolveValue(transition.spawnX, entranceEntity);
+  const spawnY = resolveValue(transition.spawnY, entranceEntity);
+  const exitDir = resolveValue(transition.exitDir, entranceEntity) || 'down';
+
+  return {
+    toMapId,
+    toMap: getMapTilesById(toMapId),
+    spawnX,
+    spawnY,
+    exitDir,
+  };
+}
+
+export function applyTransitionRuntimeState(transition, entranceEntity, deps) {
+  const {
+    runtimeState,
+  } = deps;
+
+  if (transition.storeHouseReturn && entranceEntity) {
+    runtimeState.houseReturn = {
+      x: entranceEntity.x,
+      y: entranceEntity.y,
+      w: entranceEntity.w,
+      h: entranceEntity.h,
+      exitDir: entranceEntity.exitDir,
+    };
+  }
+
+  if (transition.houseId) {
+    runtimeState.currentHouseId = transition.houseId;
+  }
+}
