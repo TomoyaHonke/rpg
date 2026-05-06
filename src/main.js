@@ -306,6 +306,35 @@ import {
   clearLeafEffectsUI,
 } from './ui/battleEffectsUI.js';
 
+import {
+  chestFlagKey as chestFlagKeySystem,
+  chestImageKey as chestImageKeySystem,
+  grantChestReward as grantChestRewardSystem,
+  normalizeChestItemId as normalizeChestItemIdSystem,
+  grantChestRewards as grantChestRewardsSystem,
+} from './systems/chestSystem.js';
+
+import {
+  createNpcDialogues,
+  createNpcEvents,
+} from './systems/npcEventSystem.js';
+
+import {
+  drawBattleIntroOverlay,
+  drawBattleMessageWindow,
+  drawBattlePartyStatusFrame,
+  drawActorPanel as drawActorPanelUI,
+  getEnemyViewCenters as getEnemyViewCentersUI,
+  makeEnemyViews as makeEnemyViewsUI,
+  drawEnemyView as drawEnemyViewUI,
+  drawEnemyViews as drawEnemyViewsUI,
+} from './ui/battleUI.js';
+
+import {
+  drawDebugRect as drawDebugRectUI,
+  drawDebugHitboxes as drawDebugHitboxesUI,
+} from './ui/debugUI.js';
+
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
     const def = ALLY_DEFS[id];
@@ -3035,44 +3064,28 @@ function useElixir(target) {
     drawHouseFallback(house, drawX, drawY, house.drawW, house.drawH);
   }
 
-  function drawDebugRect(rect, color, camX, camY) {
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.setLineDash([]);
-    ctx.strokeRect(
-      Math.round(rect.x - camX),
-      Math.round(rect.y - camY),
-      Math.round(rect.w),
-      Math.round(rect.h)
-    );
-    ctx.restore();
-  }
+ function drawDebugRect(rect, color, camX, camY) {
+  drawDebugRectUI(ctx, rect, color, camX, camY);
+}
 
-  function drawDebugHitboxes(camX, camY) {
-    if (DEBUG_HITBOX !== true) return;
+function drawDebugHitboxes(camX, camY) {
+  drawDebugHitboxesUI(ctx, {
+    DEBUG_HITBOX,
+    entities,
+    hero,
+    getCollisionBox,
+    camX,
+    camY,
+  });
+}
 
-    for (const entity of entities) {
-      if (entity.type === 'house') {
-        drawDebugRect(getCollisionBox(entity), 'red', camX, camY);
-      } else if (entity.type === 'houseEntrance' || entity.type === 'forgeEntrance') {
-        drawDebugRect(entity.rect || getCollisionBox(entity), 'blue', camX, camY);
-      } else if (entity.type === 'houseExit' || entity.type === 'exit') {
-        drawDebugRect(entity.rect || getCollisionBox(entity), 'green', camX, camY);
-      }
-    }
+function chestFlagKey(id) {
+  return chestFlagKeySystem(id);
+}
 
-    drawDebugRect(getCollisionBox(hero), 'yellow', camX, camY);
-  }
-
-  function chestFlagKey(id) {
-    return `${id}Opened`;
-  }
-
-  function chestImageKey(chest) {
-    const baseKey = chest.spriteKey || 'chest';
-    return flags[chest.flagKey] ? `${baseKey}_open` : baseKey;
-  }
+function chestImageKey(chest) {
+  return chestImageKeySystem(chest, flags);
+}
 
   function drawChestFallback(px, py, drawW, drawH, opened) {
     const base = Math.min(drawW, drawH);
@@ -3125,45 +3138,25 @@ function useElixir(target) {
   }
 
   function normalizeChestItemId(item) {
-    if (item === 'iron_sword')    return 'ironSword';
-    if (item === 'steel_sword')   return 'steelSword';
-    if (item === 'magic_sword')   return 'magicSword';
-    if (item === 'leather_armor') return 'leatherArmor';
-    if (item === 'knight_armor')  return 'knightArmor';
-    if (item === 'potion') return 'potions';
-    if (item === 'ether') return 'ether';
-    return item;
-  }
+  return normalizeChestItemIdSystem(item);
+}
 
-  function grantChestReward(reward) {
-    const item = normalizeChestItemId(reward.item);
-    const amount = reward.amount || 1;
-    if (item === 'potions') {
-      hero.potions += amount;
-      return `ポーションを${amount}つ手に入れた！`;
-    }
-    if (item === 'ether') {
-      changeItemCount('ether', amount);
-      return `エーテルを${amount}つ手に入れた！`;
-    }
-    if (item === 'gold') {
-      hero.gold += amount;
-      return `${amount}Gを手に入れた！`;
-    }
-    if (item === 'old_fragment') {
-      flags.gotOldFragment = true;
-      return '古い金属片を手に入れた！　老鍛冶屋に渡せるかもしれない。';
-    }
-    if (WEAPONS[item]) {
-      grantEquipmentToActor(item, 'weapon');
-      return `${WEAPONS[item].name}を手に入れた！`;
-    }
-    if (ARMORS[item]) {
-      grantEquipmentToActor(item, 'armor');
-      return `${ARMORS[item].name}を手に入れた！`;
-    }
-    return '';
-  }
+  function getChestSystemDeps() {
+  return {
+    hero,
+    flags,
+    WEAPONS,
+    ARMORS,
+    changeItemCount,
+    grantEquipmentToActor,
+    normalizeChestItemId,
+  };
+}
+
+function grantChestReward(reward) {
+  return grantChestRewardSystem(reward, getChestSystemDeps());
+}
+   
 
   function getLeafaAlly() {
     return allies.find(a => a.id === 'leafa' && a.flags && a.flags.hasAlly) || null;
@@ -3195,10 +3188,9 @@ function useElixir(target) {
     return true;
   }
 
-  function grantChestRewards(chest) {
-    const rewards = Array.isArray(chest.rewards) ? chest.rewards : [{ item: chest.item, amount: chest.amount }];
-    return rewards.map(grantChestReward).filter(Boolean);
-  }
+ function grantChestRewards(chest) {
+  return grantChestRewardsSystem(chest, grantChestReward);
+}
 
   function drawHeroEntity() {
     const camCol = renderCamera.col;
@@ -4068,79 +4060,31 @@ function useElixir(target) {
     ctx.drawImage(img, x, y-5, 64, 64);
   }
 
+    function getBattleUIDeps() {
+    return {
+        drawBar,
+        drawBattleHeroFace,
+        getFaceSprite,
+        drawNPC,
+        getItemCount,
+        battleTargetMode,
+        getPartyMembers,
+        selectedTargetIndex,
+    };
+    }
+
   // panelX: パネル左端X。hero=8, ally=256
-  function drawActorPanel(panelX, actor, isActive, isHero) {
-    const FACE_SIZE = 64;
-    const shakeFrames = actor.uiHitFrames || 0;
-    const shakeX = shakeFrames > 0 ? (shakeFrames % 4 < 2 ? -4 : 4) : 0;
-    const faceX  = panelX + 12;
-    const textX  = faceX + FACE_SIZE + 8;
-    const barX   = textX + 22;
-    const nameCol = isActive ? '#ffe066' : (isHero ? '#ffd700' : '#aaddff');
-    const panelOffsetX = shakeX;
-
-    if (isHero) {
-      drawBattleHeroFace(faceX + panelOffsetX, 319);
-    } else {
-      const faceImg = getFaceSprite(actor);
-      if (faceImg) {
-        ctx.drawImage(faceImg, faceX + panelOffsetX, 314, FACE_SIZE, FACE_SIZE);
-      } else {
-        drawNPC(faceX + 4 + panelOffsetX, 319, 1, '#886666', '#ddddcc', actor.spriteKey, 56, 56);
-      }
-    }
-    txt(`Lv.${actor.level}  ${isHero ? 'ゆうしゃ' : actor.name}`, textX + panelOffsetX, 330, nameCol, 13);
-    txt('HP', textX + panelOffsetX, 348, '#ff6666', 12);
-    drawBar(barX + panelOffsetX, 337, 142, actor.hp, actor.maxHp, '#dd3333');
-    if (shakeFrames > 0) {
-      const flash = Math.max(0, shakeFrames / 16);
-      ctx.fillStyle = `rgba(255, 80, 80, ${0.18 + flash * 0.22})`;
-      ctx.fillRect(barX + panelOffsetX, 337, 142, 10);
-    }
-    txt(`${actor.hp}/${actor.maxHp}`, barX + 2 + panelOffsetX, 348, '#fff', 11);
-    txt('MP', textX + panelOffsetX, 368, '#6699ff', 12);
-    drawBar(barX + panelOffsetX, 357, 142, actor.mp, actor.maxMp, '#3366cc');
-    txt(`${actor.mp}/${actor.maxMp}`, barX + 2 + panelOffsetX, 368, '#fff', 11);
-    if (isHero) txt(`PT:${actor.potions || 0} ET:${getItemCount('ether')}`, barX + 72 + panelOffsetX, 368, '#ffddaa', 11);
-
-    if ((actor.uiDamageFrames || 0) > 0 && (actor.uiDamageAmount || 0) > 0) {
-      const damageMax = actor.uiDamageMax || 18;
-      const damageT = Math.max(0, (actor.uiDamageFrames || 0) / damageMax);
-      const rise = Math.round((1 - damageT) * 14);
-      const alpha = 0.35 + damageT * 0.65;
-      const damageText = `-${actor.uiDamageAmount}`;
-      txt(damageText, panelX + 182 + panelOffsetX, 326 - rise, `rgba(255, 96, 96, ${alpha})`, 16);
-    }
-
-    if ((actor.uiHealFrames || 0) > 0) {
-      const healMax = actor.uiHealMax || 22;
-      const healT = Math.max(0, (actor.uiHealFrames || 0) / healMax);
-      const rise = Math.round((1 - healT) * 20);
-      const alpha = 0.4 + healT * 0.6;
-      const hasHp = (actor.uiHealHp || 0) > 0;
-      const hasMp = (actor.uiHealMp || 0) > 0;
-      if (hasHp) {
-        txt(`+${actor.uiHealHp}`, panelX + 148 + panelOffsetX, 326 - rise, `rgba(80, 255, 120, ${alpha})`, 16);
-      }
-      if (hasMp) {
-        const mpY = hasHp ? 342 - rise : 326 - rise;
-        txt(`MP+${actor.uiHealMp}`, panelX + 148 + panelOffsetX, mpY, `rgba(100, 180, 255, ${alpha})`, 15);
-      }
-    }
-
-    if (battleTargetMode && battleTargetMode.targetType === 'party') {
-      const partyTargets = getPartyMembers({ aliveOnly: true });
-      const selected = partyTargets[selectedTargetIndex];
-      if (selected && selected.actor === actor) {
-        ctx.save();
-        const pulse = 0.55 + Math.sin(Date.now() / 120) * 0.25;
-        ctx.strokeStyle = `rgba(255,230,80,${pulse})`;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(panelX + 4, 318, 238, 58);
-        ctx.restore();
-      }
-    }
-  }
+ function drawActorPanel(panelX, actor, isActive, isHero) {
+  drawActorPanelUI(
+    ctx,
+    txt,
+    panelX,
+    actor,
+    isActive,
+    isHero,
+    getBattleUIDeps()
+  );
+}
 
   function getBattleEnemies() {
     return battleEnemies.filter(enemy => enemy && (enemy.hp > 0 || enemy.isDying));
@@ -4151,105 +4095,30 @@ function useElixir(target) {
   }
 
   function getEnemyViewCenters(count) {
-    if (count === 1) return [256];
-    if (count === 2) return [168, 344];
-    return [96, 256, 416].slice(0, count);
-  }
+  return getEnemyViewCentersUI(count);
+}
 
   function makeEnemyViews(enemies) {
-    const centers = getEnemyViewCenters(enemies.length);
-    const enemyBaseY = 228;
-    return enemies.map((enemy, index) => {
-      const drawW = enemy.drawW || (enemy.boss ? 220 : 144);
-      const drawH = enemy.drawH || (enemy.boss ? 220 : 144);
-      const centerX = centers[index] || 256;
-      const x = Math.round(centerX - drawW / 2);
-      const y = Math.round(enemyBaseY - drawH);
-      const hpW = Math.min(132, Math.max(88, drawW - 18));
-      const hpX = Math.round(centerX - hpW / 2);
-      const hpY = Math.max(24, y - 22);
-      return {
-        enemy,
-        x,
-        y,
-        drawW,
-        drawH,
-        drawX: centerX,
-        centerX,
-        baseY: enemyBaseY,
-        shadowX: centerX,
-        shadowY: enemyBaseY + 4,
-        shadowW: Math.round(Math.min(enemy.boss ? 120 : 60, Math.max(enemy.boss ? 80 : 40, drawW * 0.55))),
-        shadowH: Math.round(Math.min(enemy.boss ? 26 : 16, Math.max(enemy.boss ? 18 : 10, drawH * 0.1))),
-        hpX,
-        hpY,
-        hpW,
-        nameX: hpX,
-        nameY: hpY - 8,
-      };
-    });
-  }
+  return makeEnemyViewsUI(enemies);
+}
+
+  function getEnemyViewUIDeps() {
+  return {
+    drawEnemy,
+    drawThinBar,
+    battleTargetMode,
+    battleEnemies,
+    selectedTargetIndex,
+  };
+}
 
   function drawEnemyView(view) {
-    const enemy = view.enemy;
-    const hitFrames = enemy.hitFlashFrames || 0;
-    const shakePower = hitFrames ? Math.ceil(hitFrames / 3) : 0;
-    const shakeX = hitFrames ? (hitFrames % 4 < 2 ? -shakePower : shakePower) : 0;
-    const deathDuration = enemy.deathDuration || 1;
-    const deathRatio = enemy.isDying ? Math.max(0, (enemy.deathTimer || 0) / deathDuration) : 1;
-    const deathLift = enemy.isDying ? Math.round((1 - deathRatio) * 22) : 0;
-    const deathScale = enemy.isDying ? 0.82 + deathRatio * 0.18 : 1;
+  drawEnemyViewUI(ctx, txt, view, getEnemyViewUIDeps());
+}
 
-    ctx.save();
-    ctx.globalAlpha = enemy.isDying ? 0.25 * deathRatio : 1;
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.filter = 'blur(2px)';
-    ctx.beginPath();
-    ctx.ellipse(view.drawX, view.shadowY, view.shadowW / 2, view.shadowH / 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    const drawW = Math.round(view.drawW * deathScale);
-    const drawH = Math.round(view.drawH * deathScale);
-    const drawX = Math.round(view.centerX - drawW / 2);
-    const drawY = Math.round(view.baseY - drawH - deathLift);
-    const drawableEnemy = { ...enemy, drawW, drawH };
-
-    ctx.save();
-    ctx.globalAlpha = enemy.isDying ? deathRatio : 1;
-    drawEnemy(drawableEnemy, drawX + shakeX, drawY, drawW / 32);
-    ctx.restore();
-    if (hitFrames > 0 && hitFrames % 2 === 0) {
-      ctx.save();
-      ctx.globalAlpha = (enemy.isDying ? deathRatio : 1) * 0.7;
-      ctx.filter = 'brightness(4) saturate(0)';
-      drawEnemy(drawableEnemy, drawX + shakeX, drawY, drawW / 32);
-      ctx.restore();
-    }
-
-    if (battleTargetMode && battleTargetMode.targetType !== 'party' && !enemy.isDying && enemy.hp > 0) {
-      const selectedEnemy = battleEnemies[selectedTargetIndex];
-      if (selectedEnemy === enemy) {
-        const pulse = 0.55 + Math.sin(Date.now() / 120) * 0.25;
-        ctx.save();
-        ctx.strokeStyle = `rgba(255,230,80,${pulse})`;
-        ctx.lineWidth = 4;
-        ctx.filter = 'brightness(1.25)';
-        ctx.strokeRect(view.x - 8, view.y - 8, view.drawW + 16, view.drawH + 16);
-        ctx.restore();
-      }
-    }
-
-    if (enemy.isDying) return;
-    txt(enemy.name, view.nameX, view.nameY, '#aaffaa', enemy.boss ? 16 : 14);
-    txt('HP', view.hpX, view.hpY + 7, '#ff6666', 10);
-    drawThinBar(view.hpX + 22, view.hpY, view.hpW - 22, enemy.hp, enemy.maxHp, '#dd3333');
-    txt(`${enemy.hp}/${enemy.maxHp}`, view.hpX + 24, view.hpY + 7, '#fff', 9);
-  }
-
-  function drawEnemyViews(enemies) {
-    for (const view of makeEnemyViews(enemies)) drawEnemyView(view);
-  }
+ function drawEnemyViews(enemies) {
+  drawEnemyViewsUI(ctx, txt, enemies, getEnemyViewUIDeps());
+}
 
   function spawnFireEffectOnEnemy(enemy) {
     if (!enemy) return;
@@ -4321,55 +4190,38 @@ function useElixir(target) {
   }
 
   function renderBattle() {
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
-    drawBattleBackground(currentBattleBgKey);
+  ctx.save();
+  ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
 
-    // 敵
-    drawEnemyViews(getBattleEnemies());
-    drawFireEffects();
-    drawLeafEffects();
-    drawSlashEffects();
-    drawHitEffects();
+  drawBattleBackground(currentBattleBgKey);
 
-    if (battleIntro.active) {
-      ctx.fillStyle = 'rgba(0,0,0,0.34)';
-      ctx.fillRect(0, 0, 512, 256);
-      if (Date.now() < battleIntro.flashUntil) {
-        ctx.fillStyle = 'rgba(160,0,220,0.22)';
-        ctx.fillRect(0, 0, 512, 384);
-      }
-    }
+  // 敵
+  drawEnemyViews(getBattleEnemies());
+  drawFireEffects();
+  drawLeafEffects();
+  drawSlashEffects();
+  drawHitEffects();
 
-    // メッセージウィンドウ
-    ctx.fillStyle = 'rgba(5,5,20,0.92)';
-    ctx.fillRect(8, 256, 496, 52);
-    ctx.strokeStyle = '#5555aa';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(8, 256, 496, 52);
-    txt(msg, 18, 282, '#ffffff', 14);
+  drawBattleIntroOverlay(ctx, battleIntro);
 
-    // パーティステータス（下段）
-    const activeAlly = allies.find(a => a.flags.hasAlly);
-    const panelW = activeAlly ? 496 : 292;
-    ctx.fillStyle = 'rgba(5,5,20,0.92)';
-    ctx.fillRect(8, 314, panelW, 64);
-    ctx.strokeStyle = '#5555aa';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(8, 314, panelW, 64);
+  drawBattleMessageWindow(ctx, txt, msg);
 
-    // 主人公
-    const heroIsActive = !!(battleCommandActor && battleCommandActor.type === 'hero');
-    drawActorPanel(8, hero, heroIsActive, true);
+  // パーティステータス（下段）
+  const activeAlly = allies.find(a => a.flags.hasAlly);
+  drawBattlePartyStatusFrame(ctx, !!activeAlly);
 
-    // 仲間
-    if (activeAlly) {
-      const allyIsActive = !!(battleCommandActor && battleCommandActor.type === 'ally');
-      drawActorPanel(256, activeAlly, allyIsActive, false);
-    }
+  // 主人公
+  const heroIsActive = !!(battleCommandActor && battleCommandActor.type === 'hero');
+  drawActorPanel(8, hero, heroIsActive, true);
 
-    ctx.restore();
+  // 仲間
+  if (activeAlly) {
+    const allyIsActive = !!(battleCommandActor && battleCommandActor.type === 'ally');
+    drawActorPanel(256, activeAlly, allyIsActive, false);
   }
+
+  ctx.restore();
+}
 
   // ============================================================
   // 勝利画面を描画する
@@ -6495,162 +6347,41 @@ function buyGreenRobe() {
   // NPC 会話テーブル（npcId → flags を見てセリフ配列を返す）
   // 副作用なし。新規NPC追加時はここにエントリを追加するだけでよい。
   // ============================================================
-  const NPC_DIALOGUES = {
-    elder: () => {
-      if (flags.defeatedDemonLord) return [
-        '魔王を倒したか…　よくぞやった！',
-        '世界に光が戻ったぞ。お前は真の勇者じゃ。',
-      ];
-      if (flags.gotDemonKey) return [
-        '魔王の鍵を持っているのか！',
-        '荒野の北東に　魔王の城への門がある。',
-        '全力で戦うのじゃ！',
-      ];
-      if (flags.gotSeal2) return [
-        '二つの封印石を砕いたか…',
-        '魔王の城の扉は　魔王の鍵でのみ　開く。',
-        'お前ならできる。行くのじゃ！',
-      ];
-      if (flags.defeatedDarkKnight) return [
-        'ダークナイトを倒したか。よくやった！',
-        '封印石・壱を持って　西の荒野へ向かえ。',
-        'カゲのまちの　鍛冶屋を　訪ねるのじゃ。',
-      ];
-      if (flags.leafaJoined) return [
-        'リーファが共にいるとは　頼もしいぞ！',
-        '南東のダンジョンに　強い敵がいる。',
-        '準備を整えてから　挑むのじゃ。',
-      ];
-      if (flags.heardLeafaRumor) return [
-        '北西の森に　誰かが困っているようじゃ。',
-        '急いで助けに行ってやれ！',
-      ];
-      if (flags.talkedToElder) return [
-        'スライムには　気をつけるのじゃ。',
-        '見張りの男に　何か聞いてみるといい。',
-        '北西の森にも　気になるものがあるぞ。',
-      ];
-      return [
-        'おお、旅人よ。よくぞ　ヒカリのまちへ。',
-        'このあたりの　草むらには　スライムが出る。',
-        '南東の　ダンジョンへ　行けるくらい強くなれ！',
-      ];
-    },
-    town_watchman: () => {
-      if (flags.leafaJoined) return ['あの子、無事だったんだな。よかった。'];
-      if (flags.heardLeafaRumor) return [
-        '北西の森には　気をつけろ。',
-        '早く助けに行ってやれ。',
-      ];
-      return [
-        '北西の森で、誰かが魔物に追われていたらしい。',
-        'もし行くなら　気をつけてくれ。',
-      ];
-    },
-    child: () => {
-      if (slimeKills >= 3) return [questRewardMsg || 'ありがとう！'];
-      return ['スライムを3匹倒してきて'];
-    },
-    castle_guard: () => {
-      if (flags.defeatedDemonLord) return ['魔王を倒したのか…', 'もはや　俺には止める理由もない。'];
-      return ['ここは魔王ヴァルドールの居城。', '命が惜しければ引き返せ！'];
-    },
-    shadow_smith: () => {
-      if (flags.defeatedDemonLord) return ['魔王を倒したとは…', 'お前は本物の勇者だ。'];
-      if (flags.gotDemonKey) return ['魔王の鍵か…　荒野の北東に向かえ。', '城の門が見えるはずだ。'];
-      if (flags.gotSeal2) return ['魔王の城への鍵を　手に入れたのか。', '奴を倒せるのは　お前だけだ。気をつけろ。'];
-      if (flags.defeatedForestBoss) return ['樹霊を倒したか…　大したものだ。', '封印石・弐が　砕けたはずだ。'];
-      if (flags.gotForestPass) return ['森は危険だ。気をつけて行け。', 'この町を出て　南へ進め。森の入口がある。'];
-      if (flags.gotSeal1) return [
-        'おお…　封印石を砕いたのか。なかなかやるな。',
-        'ならばこれを持っていけ。',
-        '「呪われた森への通行証」だ。',
-        'この町の南に　森の入口がある。',
-      ];
-      return ['ここ　カゲのまちへ　よく来たな。', 'まずは　洞窟の　ダークナイトを　倒すことだ。'];
-    },
-    field_healer: () => [
-      '焚き火跡で　少し休んでいけ。',
-      '南東の岩場の先に　洞窟がある。',
-      '西の枯れ草の道は　荒野へ続く。今は無理をするな。',
-      'HPとMPが回復した！',
-    ],
-    old_blacksmith: () => {
-      if (!flags.talkedToOldBlacksmith) return [
-        'おお、旅の者か。わしは鍛冶屋のグルドじゃ。',
-        'この荒野で、古い金属片を探しておる。',
-        '壊れた橋を直すためにも　どうしても必要でな。',
-      ];
-      if (flags.outpostQuestDone) return [
-        '魔法の剣は大切に使うのじゃ。',
-        'いつか壊れた橋も直せると　いいんだがな…',
-      ];
-      if (flags.gotOldFragment) return [
-        'おお、それは古い金属片！　持ってきてくれたのか！',
-        'これは…　古代の金属片だ。この素材があれば　壊れた橋を直せるかもしれない！',
-        '礼に　魔法の剣を受け取ってくれ。',
-      ];
-      return [
-        '古い金属片を見つけたら、わしのところへ持ってきてくれ。',
-        // '見つけてきてくれたら　良い剣を鍛えてやるぞ。',
-      ];
-    },
-    outpost_traveler: () => {
-      if (flags.outpostQuestDone) return ['老鍛冶屋が　嬉しそうだったぞ。', 'お前のおかげだな。'];
-      if (flags.gotOldFragment) return ['おお、それが古い金属片か！', '老鍛冶屋に渡してやれ！'];
-      return [
-        'この集落は荒野の端にある　小さな宿場だ。',
-        '老鍛冶屋は橋を直そうと　材料を集めているんだ。',
-        '荒野の奥に　古い金属片があると聞いたが…',
-      ];
-    },
-  };
+ const NPC_DIALOGUES = createNpcDialogues({
+  flags,
+  getSlimeKills: () => slimeKills,
+  getQuestRewardMsg: () => questRewardMsg,
+});
 
-  // npcId → セリフ配列を返す（NPC_DIALOGUES → role fallback → npc.lines の順）
-  function getNpcLines(npc) {
+function getNpcLines(npc) {
+
   return getNpcLinesSystem(npc, {
-    NPC_DIALOGUES,
-    getNpcRole,
-  });
-}
 
+    NPC_DIALOGUES,
+
+    getNpcRole,
+
+  });
+
+}
   // ============================================================
   // NPC イベントテーブル（会話開始時に一度だけ呼ばれる副作用）
   // ============================================================
-  const NPC_EVENTS = {
-    elder: () => {
-      if (!flags.talkedToElder) {
-        flags.talkedToElder = true;
-      }
-    },
-    town_watchman: () => {
-      if (!flags.leafaRescueDone && !flags.heardLeafaRumor) {
-        flags.heardLeafaRumor = true;
-      }
-    },
-    shadow_smith: () => {
-      if (flags.gotSeal1 && !flags.gotForestPass) {
-        flags.gotForestPass = true;
-        showNotice('森の通行証を手に入れた！');
-      }
-    },
-    child: () => {
-      if (slimeKills >= 3 && !questDone) {
-        const levelResult = gainExp(5);
-        questDone = true;
-        questRewardMsg = levelResult.leveled
-          ? 'ありがとう！ 経験値を5獲得した！ レベルアップ！ 体力が少し回復した…'
-          : 'ありがとう！ 経験値を5獲得した！';
-      }
-    },
-    old_blacksmith: () => {
-      if (flags.talkedToOldBlacksmith && flags.gotOldFragment && !flags.outpostQuestDone) {
-        flags.outpostQuestDone = true;
-        if (!hero.weaponsOwned.includes('magicSword')) hero.weaponsOwned.push('magicSword');
-        showNotice('魔法の剣を手に入れた！');
-      }
-    },
-  };
+  
+const NPC_EVENTS = createNpcEvents({
+  flags,
+  getSlimeKills: () => slimeKills,
+  isQuestDone: () => questDone,
+  setQuestDone: value => {
+    questDone = value;
+  },
+  setQuestRewardMsg: value => {
+    questRewardMsg = value;
+  },
+  gainExp,
+  hero,
+  showNotice,
+});
 
   // NPC との会話開始時に呼ばれる個別イベントフック
   function handleNpcEvent(npc) {

@@ -37,15 +37,12 @@ export function getNpcLines(npc, deps) {
     NPC_DIALOGUES,
     getNpcRole,
   } = deps;
-
   if (npc.npcId && NPC_DIALOGUES[npc.npcId]) {
     return NPC_DIALOGUES[npc.npcId]();
   }
-
   if (getNpcRole(npc) === 'inn') {
     return ['HPとMPが回復した！'];
   }
-
   return npc.lines;
 }
 
