@@ -511,6 +511,14 @@ import {
   isMoveDownKey as isMoveDownKeySystem,
   updateMoveKeyDown as updateMoveKeyDownSystem,
   updateMoveKeyUp as updateMoveKeyUpSystem,
+  handleSaveLoadShortcut as handleSaveLoadShortcutSystem,
+  handlePrologueInput as handlePrologueInputSystem,
+  handleMapInput as handleMapInputSystem,
+  handleBattleInput as handleBattleInputSystem,
+  handleShopInput as handleShopInputSystem,
+  handleTalkInput as handleTalkInputSystem,
+  handleKeyDown as handleKeyDownSystem,
+  handleKeyUp as handleKeyUpSystem,
 } from './systems/inputSystem.js';
 
 
@@ -987,6 +995,61 @@ function getTransitionDestinationDeps() {
 function getTransitionRuntimeStateDeps() {
   return {
     runtimeState,
+  };
+}
+
+function getInputSystemDeps() {
+  return {
+    saveGame,
+    loadGame,
+
+    isCancelKey,
+    isConfirmKey,
+
+    prologueState,
+    skipPrologue,
+    advancePrologueLine,
+
+    updateMoveKeyDown,
+    openEquipMenu,
+    getAdjacentInteractable,
+    getAdjacentBoss,
+
+    battleIntro,
+    skipBattleIntro,
+
+    battleTargetMode,
+    moveTargetSelection,
+    confirmTargetSelection,
+    cancelTargetSelection,
+
+    battleVictory,
+    advanceBattleVictory,
+
+    heroTurn,
+    moveBattleCommand,
+    confirmBattleCommand,
+
+    moveShopCursor,
+    confirmShopChoice,
+    closeShop,
+
+    advanceDialogue,
+    currentState,
+    GameState,
+
+    handleSaveLoadShortcut,
+    handleTitleInput,
+    handlePrologueInput,
+    handleMapInput,
+    handleEquipInput,
+    handleBattleInput,
+    handleShopInput,
+    handleTalkInput,
+
+    backToMap,
+    continueAfterGameOver,
+    resetGame,
   };
 }
 
@@ -6353,218 +6416,41 @@ function handleEquipInput(e) {
   // ============================================================
   // キーボード入力
   // ============================================================
-    document.addEventListener('keydown', e => {
-    // Shift + S：セーブ
-    if (e.shiftKey && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        saveGame();
-        return;
-    }
+function handleSaveLoadShortcut(e) {
+  return handleSaveLoadShortcutSystem(e, getInputSystemDeps());
+}
 
-    // Shift + L：ロード
-    if (e.shiftKey && (e.key === 'l' || e.key === 'L')) {
-        e.preventDefault();
-        loadGame();
-        return;
-    }
+function handleMapInput(e) {
+  return handleMapInputSystem(e, getInputSystemDeps());
+}
 
-    // タイトル画面
-    if (currentState === GameState.TITLE) {
-        handleTitleInput(e);
-        return;
-    }
+function handlePrologueInput(e) {
+  return handlePrologueInputSystem(e, getInputSystemDeps());
+}
 
-    // プロローグ
-    if (currentState === GameState.PROLOGUE) {
-        if (isCancelKey(e)) {
-        e.preventDefault();
-        skipPrologue();
-        return;
-        }
+function handleKeyUp(e) {
+  handleKeyUpSystem(e, getInputSystemDeps());
+}
 
-        if (isConfirmKey(e)) {
-        e.preventDefault();
-        if (!prologueState.cooldown) {
-            advancePrologueLine();
-        }
-        return;
-        }
+function handleKeyDown(e) {
+  handleKeyDownSystem(e, getInputSystemDeps());
+}
 
-        return;
-    }
+function handleBattleInput(e) {
+  return handleBattleInputSystem(e, getInputSystemDeps());
+}
 
-    // マップ
-    if (currentState === GameState.MAP) {
-        if (e.key === 'e' || e.key === 'E') {
-        e.preventDefault();
-        openEquipMenu();
-        return;
-        }
+function handleShopInput(e) {
+  return handleShopInputSystem(e, getInputSystemDeps());
+}
 
-        if (updateMoveKeyDown(e)) {
-        e.preventDefault();
-        return;
-        }
+function handleTalkInput(e) {
+  return handleTalkInputSystem(e, getInputSystemDeps());
+}
 
-        // Space・Enter・Z で隣接した対象に話しかける/調べる
-        if (isConfirmKey(e)) {
-        e.preventDefault();
+    document.addEventListener('keydown', handleKeyDown);
 
-        const adj = getAdjacentInteractable();
-
-        if (adj) {
-            adj.interact();
-        } else {
-            const boss = getAdjacentBoss();
-            if (boss) {
-            boss.interact();
-            }
-        }
-
-        return;
-        }
-
-        return;
-    }
-
-    // 装備メニュー
-    if (currentState === GameState.EQUIP) {
-        handleEquipInput(e);
-        return;
-    }
-
-    // 戦闘
-    if (currentState === GameState.BATTLE) {
-        if (battleIntro.active && isConfirmKey(e)) {
-        e.preventDefault();
-
-        if (!battleIntro.unskippable) {
-            skipBattleIntro();
-        }
-
-        return;
-        }
-
-        if (battleTargetMode) {
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            moveTargetSelection(-1);
-            return;
-        }
-
-        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            moveTargetSelection(1);
-            return;
-        }
-
-        if (isConfirmKey(e)) {
-            e.preventDefault();
-            confirmTargetSelection();
-            return;
-        }
-
-        if (isCancelKey(e)) {
-            e.preventDefault();
-            cancelTargetSelection();
-            return;
-        }
-
-        return;
-        }
-
-        if (battleVictory.active && isConfirmKey(e)) {
-        e.preventDefault();
-        advanceBattleVictory();
-        return;
-        }
-
-        if (heroTurn && !battleVictory.active && !battleVictory.pending) {
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            moveBattleCommand(-1);
-            return;
-        }
-
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            moveBattleCommand(1);
-            return;
-        }
-
-        if (isConfirmKey(e)) {
-            e.preventDefault();
-            confirmBattleCommand();
-            return;
-        }
-
-        return;
-        }
-
-        return;
-    }
-
-    // ショップ
-    if (currentState === GameState.SHOP) {
-        if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        moveShopCursor(-1);
-        return;
-        }
-
-        if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        moveShopCursor(1);
-        return;
-        }
-
-        if (isConfirmKey(e)) {
-        e.preventDefault();
-        confirmShopChoice();
-        return;
-        }
-
-        if (isCancelKey(e)) {
-        e.preventDefault();
-        closeShop();
-        return;
-        }
-
-        return;
-    }
-
-    // 会話
-    if (currentState === GameState.TALK) {
-        // 元の挙動維持：Space・Enter・Z・Escape で進める
-        if (isConfirmKey(e) || e.key === 'Escape') {
-        e.preventDefault();
-        advanceDialogue();
-        return;
-        }
-
-        return;
-    }
-
-    // 勝利/敗北/エンディング
-    if (currentState === GameState.WIN) {
-        backToMap();
-        return;
-    }
-
-    if (currentState === GameState.LOSE) {
-        continueAfterGameOver();
-        return;
-    }
-
-    if (currentState === GameState.ENDING) {
-        resetGame();
-        return;
-    }
-    });
-
-    document.addEventListener('keyup', e => {
-    updateMoveKeyUp(e);
-    });
+    document.addEventListener('keyup', handleKeyUp);
 
   // マップへ戻る
   function backToMap() {
