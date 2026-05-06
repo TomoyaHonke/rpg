@@ -140,3 +140,60 @@ export function applyTransitionRuntimeState(transition, entranceEntity, deps) {
     runtimeState.currentHouseId = transition.houseId;
   }
 }
+
+export function getTileRenderMeta(tile, map, deps) {
+  const {
+    T,
+    TILE_META,
+    TILE_CONTEXT_META,
+    getTileContextKey,
+  } = deps;
+
+  const baseMeta = TILE_META[tile] || TILE_META[T.GRASS];
+  const contextMeta = TILE_CONTEXT_META[getTileContextKey(map)]?.[tile] || {};
+
+  return {
+    ...baseMeta,
+    ...contextMeta,
+  };
+}
+
+export function calculateRenderCamera(deps) {
+  const {
+    currentMap,
+    hero,
+    TILE_RENDER,
+    VIEW_COLS,
+    VIEW_ROWS,
+    isHouseMap,
+    mapCols,
+    mapRows,
+  } = deps;
+
+  const fixedHouseCamera = isHouseMap(currentMap);
+
+  const camCol = fixedHouseCamera
+    ? 0
+    : Math.max(
+        0,
+        Math.min(
+          mapCols() - VIEW_COLS,
+          (hero.drawX + TILE_RENDER / 2) / TILE_RENDER - VIEW_COLS / 2
+        )
+      );
+
+  const camRow = fixedHouseCamera
+    ? 0
+    : Math.max(
+        0,
+        Math.min(
+          mapRows() - VIEW_ROWS,
+          (hero.drawY + TILE_RENDER / 2) / TILE_RENDER - VIEW_ROWS / 2
+        )
+      );
+
+  return {
+    col: camCol,
+    row: camRow,
+  };
+}

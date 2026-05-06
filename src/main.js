@@ -391,6 +391,8 @@ import {
   resolveTransitionAttempt as resolveTransitionAttemptSystem,
   resolveTransitionDestination as resolveTransitionDestinationSystem,
   applyTransitionRuntimeState as applyTransitionRuntimeStateSystem,
+  getTileRenderMeta as getTileRenderMetaSystem,
+  calculateRenderCamera as calculateRenderCameraSystem,
 } from './systems/mapSystem.js';
 
 import {
@@ -484,6 +486,32 @@ import {
   drawEntities as drawEntitiesSystem,
   syncEntities as syncEntitiesSystem,
 } from './systems/entitySystem.js';
+
+import {
+  drawSignEntity as drawSignEntityUI,
+  drawTileFallback as drawTileFallbackUI,
+  drawVisibleTiles as drawVisibleTilesUI,
+  drawMapOverlay as drawMapOverlayUI,
+  renderMap as renderMapUI,
+} from './ui/mapUI.js';
+
+import {
+  renderTitle as renderTitleUI,
+} from './ui/titleUI.js';
+
+import {
+  handleTitleInput as handleTitleInputSystem,
+  startTitleMenuAction as startTitleMenuActionSystem,
+} from './systems/titleSystem.js';
+
+import {
+  isConfirmKey as isConfirmKeySystem,
+  isCancelKey as isCancelKeySystem,
+  isMoveUpKey as isMoveUpKeySystem,
+  isMoveDownKey as isMoveDownKeySystem,
+  updateMoveKeyDown as updateMoveKeyDownSystem,
+  updateMoveKeyUp as updateMoveKeyUpSystem,
+} from './systems/inputSystem.js';
 
 
   function joinAlly(id) {
@@ -858,6 +886,94 @@ function getMapSystemDeps() {
     castleMap,
     leafaForestMap,
     isHouseMap,
+  };
+}
+
+function getTileRenderMetaDeps() {
+  return {
+    T,
+    TILE_META,
+    TILE_CONTEXT_META,
+    getTileContextKey,
+  };
+}
+
+function getRenderCameraDeps() {
+  return {
+    currentMap: runtimeState.currentMap,
+    hero,
+    TILE_RENDER,
+    VIEW_COLS,
+    VIEW_ROWS,
+    isHouseMap,
+    mapCols,
+    mapRows,
+  };
+}
+
+function drawVisibleTiles(camCol, camRow) {
+  drawVisibleTilesUI({
+    camCol,
+    camRow,
+    VIEW_COLS,
+    VIEW_ROWS,
+    mapCols,
+    mapRows,
+    drawTile,
+  });
+}
+
+function drawMapOverlay() {
+  drawMapOverlayUI(ctx, {
+    currentMap: runtimeState.currentMap,
+    dungeonMap,
+    field2Map,
+    shadowTownMap,
+    VIEW_W,
+    VIEW_H,
+  });
+}
+
+function getRenderMapDeps() {
+  return {
+    calculateRenderCamera: () => calculateRenderCameraSystem(getRenderCameraDeps()),
+
+    setRenderCamera: nextRenderCamera => {
+      renderCamera = nextRenderCamera;
+    },
+
+    drawVisibleTiles,
+    drawMapOverlay,
+    drawEntities,
+    drawDebugHitboxes,
+    TILE_RENDER,
+  };
+}
+
+function getTitleUIDeps() {
+  return {
+    VIEW_W,
+    VIEW_H,
+    uiImgs,
+    txt,
+    TITLE_MENU_ITEMS,
+    titleMenuIndex,
+  };
+}
+
+function getTitleSystemDeps() {
+  return {
+    TITLE_MENU_ITEMS,
+    getTitleMenuIndex: () => titleMenuIndex,
+    setTitleMenuIndex: nextIndex => {
+      titleMenuIndex = nextIndex;
+    },
+    isConfirmKey,
+    startTitleMenuAction,
+
+    TitleAction,
+    resetGame,
+    startPrologue,
   };
 }
 
@@ -1907,10 +2023,12 @@ function useElixir(target) {
   }
 
   function getTileRenderMeta(tile, map = runtimeState.currentMap) {
-    const baseMeta = TILE_META[tile] || TILE_META[T.GRASS];
-    const contextMeta = TILE_CONTEXT_META[getTileContextKey(map)]?.[tile] || {};
-    return { ...baseMeta, ...contextMeta };
-  }
+  return getTileRenderMetaSystem(
+    tile,
+    map,
+    getTileRenderMetaDeps()
+  );
+}
 
   function getTileImageKey(col, row) {
     return getTileRenderMeta(runtimeState.currentMap[row][col]).spriteKey || null;
@@ -1932,9 +2050,6 @@ function useElixir(target) {
 
   const CUSTOM_TILE_DRAWERS = {};
 
-  function drawTileFallback(fallbackDrawer, tileContext) {
-    fallbackDrawer(tileContext);
-  }
 
   function drawGrassTile(tileContext, fallbackDrawer) { drawTileFallback(fallbackDrawer, tileContext); }
   function drawTreeTile(tileContext, fallbackDrawer) { drawTileFallback(fallbackDrawer, tileContext); }
@@ -2710,18 +2825,24 @@ function getCollisionBox(entity, x = entity.x, y = entity.y) {
     ctx.fillRect(px + p(5), py + p(18), p(22), p(2));
   }
 
-  function drawSignEntity(sign) {
-    const camX = renderCamera.col * TILE_RENDER;
-    const camY = renderCamera.row * TILE_RENDER;
-    const screenX = Math.round(sign.x - camX);
-    const screenY = Math.round(sign.y - camY);
-    const signSize = sign.drawW || sign.drawH || DEFAULT_SIGN_DRAW_SIZE;
-    if (screenX < -signSize || screenX > VIEW_W || screenY < -signSize || screenY > VIEW_H) return;
+  function getMapUIDeps() {
+  return {
+    renderCamera,
+    TILE_RENDER,
+    DEFAULT_SIGN_DRAW_SIZE,
+    VIEW_W,
+    VIEW_H,
+    drawSign,
+  };
+}
 
-    const drawX = screenX + Math.round((TILE_RENDER - signSize) / 2);
-    const drawY = screenY + TILE_RENDER - signSize;
-    drawSign(drawX, drawY, signSize);
-  }
+  function drawSignEntity(sign) {
+  drawSignEntityUI(sign, getMapUIDeps());
+}
+
+    function drawTileFallback(fallbackDrawer, tileContext) {
+    drawTileFallbackUI(fallbackDrawer, tileContext);
+    }
 
   function getDecorImageKey(kind) {
     const keyMap = {
@@ -3437,37 +3558,10 @@ function updateMove() {
   }
 }
 
-  // ============================================================
-  // マップ画面を描画する
-  // ============================================================
+
   function renderMap() {
-    // ── カメラ計算（hero.drawX/drawY のピクセル座標に追従） ───────────
-    const fixedHouseCamera = isHouseMap(runtimeState.currentMap);
-    const camCol = fixedHouseCamera ? 0 : Math.max(0, Math.min(mapCols() - VIEW_COLS, (hero.drawX + TILE_RENDER / 2) / TILE_RENDER - VIEW_COLS / 2));
-    const camRow = fixedHouseCamera ? 0 : Math.max(0, Math.min(mapRows() - VIEW_ROWS, (hero.drawY + TILE_RENDER / 2) / TILE_RENDER - VIEW_ROWS / 2));
-    renderCamera = { col: camCol, row: camRow };
-
-    // ── 可視タイルを描画（サブピクセルカメラ対応で +1 余分に描く） ──────
-    const c0 = Math.floor(camCol), r0 = Math.floor(camRow);
-    for (let r = r0; r < Math.min(r0 + VIEW_ROWS + 1, mapRows()); r++)
-      for (let c = c0; c < Math.min(c0 + VIEW_COLS + 1, mapCols()); c++)
-        drawTile(c, r, camCol, camRow);
-
-    // 暗闇・霧オーバーレイ
-    if (runtimeState.currentMap === dungeonMap) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    } else if (runtimeState.currentMap === field2Map) {
-      ctx.fillStyle = 'rgba(20, 10, 40, 0.30)';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    } else if (runtimeState.currentMap === shadowTownMap) {
-      ctx.fillStyle = 'rgba(10, 5, 30, 0.40)';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    }
-
-    drawEntities();
-    drawDebugHitboxes(camCol * TILE_RENDER, camRow * TILE_RENDER);
-  }
+  renderMapUI(getRenderMapDeps());
+}
 
   function renderEquipMenu() {
     ctx.save();
@@ -3864,43 +3958,8 @@ function updateMove() {
   // タイトル画面を描画する
   // ============================================================
   function renderTitle() {
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384);
-
-    const bgImg = uiImgs.title_bg;
-    if (bgImg && bgImg._ready) {
-      ctx.drawImage(bgImg, 0, 0, 512, 384);
-    } else {
-      const grad = ctx.createLinearGradient(0, 0, 0, 384);
-      grad.addColorStop(0, '#060318');
-      grad.addColorStop(1, '#1a1245');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 512, 384);
-
-      const t = Date.now() / 1200;
-      for (let i = 0; i < 60; i++) {
-        const sx = ((Math.sin(i * 3.1 + t * 0.09) * 0.5 + 0.5) * 512) | 0;
-        const sy = ((Math.cos(i * 2.7 + t * 0.07) * 0.5 + 0.5) * 240) | 0;
-        const alpha = 0.3 + 0.7 * Math.sin(i * 1.7 + t);
-        ctx.fillStyle = `rgba(210, 200, 255, ${alpha.toFixed(2)})`;
-        ctx.fillRect(sx, sy, 2, 2);
-      }
-    }
-
-    txt('AI  RPG', 98, 118, '#ffd700', 54);
-    txt('〜 勇者と仲間たちの物語 〜', 96, 180, '#aaddff', 16);
-
-    const selectedItem = TITLE_MENU_ITEMS[titleMenuIndex];
-    if (selectedItem) {
-      txt(`> ${selectedItem.label}`, 190, 252, '#ffffff', 18);
-    }
-
-    if (Math.floor(Date.now() / 600) % 2 === 0) {
-      txt('Enter / Space / Z  でスタート', 78, 300, '#88aaff', 16);
-    }
-
-    ctx.restore();
-  }
+  renderTitleUI(ctx, getTitleUIDeps());
+}
 
   // ============================================================
   // プロローグ
@@ -3987,38 +4046,41 @@ function refreshStatusBar() {
   }
 
   function isConfirmKey(e) {
-    return e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z';
-  }
+  return isConfirmKeySystem(e);
+}
+
+function isCancelKey(e) {
+  return isCancelKeySystem(e);
+}
+
+function isMoveUpKey(e) {
+  return isMoveUpKeySystem(e);
+}
+
+function isMoveDownKey(e) {
+  return isMoveDownKeySystem(e);
+}
+
+function updateMoveKeyDown(e) {
+  return updateMoveKeyDownSystem(e, keys);
+}
+
+function updateMoveKeyUp(e) {
+  return updateMoveKeyUpSystem(e, keys);
+}
 
   function startTitleMenuAction(action) {
-    if (action === TitleAction.NEW_GAME) {
-      resetGame();
-      startPrologue();
-    }
-  }
+  startTitleMenuActionSystem(action, getTitleSystemDeps());
+}
 
-  function handleTitleInput(e) {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'w' || e.key === 's') {
-      e.preventDefault();
-      const delta = e.key === 'ArrowUp' || e.key === 'w' ? -1 : 1;
-      titleMenuIndex = (titleMenuIndex + delta + TITLE_MENU_ITEMS.length) % TITLE_MENU_ITEMS.length;
-      return;
+    function handleTitleInput(e) {
+    handleTitleInputSystem(e, getTitleSystemDeps());
+    }
+    function updateMap() {
+        updateEntities();
     }
 
-    if (isConfirmKey(e)) {
-      e.preventDefault();
-      const selectedItem = TITLE_MENU_ITEMS[titleMenuIndex];
-      if (selectedItem) startTitleMenuAction(selectedItem.action);
-    }
-  }
 
-  function updateMap() {
-    updateEntities();
-  }
-
-  function drawMap() {
-    renderMap();
-  }
 
   function updateTalk() {}
 
@@ -4107,7 +4169,7 @@ function refreshStatusBar() {
   function drawCurrentState() {
     if (currentState === GameState.TITLE) renderTitle();
     else if (currentState === GameState.PROLOGUE) renderPrologue();
-    else if (currentState === GameState.MAP) drawMap();
+    else if (currentState === GameState.MAP) renderMap();
     else if (currentState === GameState.TALK) drawTalk();
     else if (currentState === GameState.SHOP) drawShop();
     else if (currentState === GameState.BATTLE) drawBattle();
@@ -6122,7 +6184,7 @@ function loadGame() {
 }
 
 function handleEquipInput(e) {
-  if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
+  if (isCancelKey(e)) {
     e.preventDefault();
     if (equipMenuMode === 'equip_slot') {
       equipMenuMode = 'chara';
@@ -6291,149 +6353,218 @@ function handleEquipInput(e) {
   // ============================================================
   // キーボード入力
   // ============================================================
-  document.addEventListener('keydown', e => {
+    document.addEventListener('keydown', e => {
+    // Shift + S：セーブ
     if (e.shiftKey && (e.key === 's' || e.key === 'S')) {
-      e.preventDefault();
-      saveGame();
-      return;
+        e.preventDefault();
+        saveGame();
+        return;
     }
+
+    // Shift + L：ロード
     if (e.shiftKey && (e.key === 'l' || e.key === 'L')) {
-      e.preventDefault();
-      loadGame();
-      return;
+        e.preventDefault();
+        loadGame();
+        return;
     }
+
+    // タイトル画面
     if (currentState === GameState.TITLE) {
-      handleTitleInput(e);
-      return;
+        handleTitleInput(e);
+        return;
     }
+
+    // プロローグ
     if (currentState === GameState.PROLOGUE) {
-      if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
+        if (isCancelKey(e)) {
         e.preventDefault();
         skipPrologue();
-      } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
+        return;
+        }
+
+        if (isConfirmKey(e)) {
         e.preventDefault();
-        if (!prologueState.cooldown) advancePrologueLine();
-      }
-      return;
+        if (!prologueState.cooldown) {
+            advancePrologueLine();
+        }
+        return;
+        }
+
+        return;
     }
+
+    // マップ
     if (currentState === GameState.MAP) {
-      if (e.key === 'e' || e.key === 'E') {
+        if (e.key === 'e' || e.key === 'E') {
         e.preventDefault();
         openEquipMenu();
         return;
         }
-      if (e.key === 'ArrowUp'    || e.key === 'w') { e.preventDefault(); keys.up = true; }
-      if (e.key === 'ArrowDown'  || e.key === 's') { e.preventDefault(); keys.down = true; }
-      if (e.key === 'ArrowLeft'  || e.key === 'a') { e.preventDefault(); keys.left = true; }
-      if (e.key === 'ArrowRight' || e.key === 'd') { e.preventDefault(); keys.right = true; }
-      // Space・Enter・Z で隣接した対象に話しかける/調べる
-      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
+
+        if (updateMoveKeyDown(e)) {
         e.preventDefault();
-        const adj = getAdjacentInteractable();
-        if (adj) {
-          adj.interact();
-        } else {
-          const boss = getAdjacentBoss();
-          if (boss) boss.interact();
-        }
-      }
-   
-      } else if (currentState === GameState.EQUIP) {
-        handleEquipInput(e);
-        }
-      else if (currentState === GameState.BATTLE) {
-      if (battleIntro.active && (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z')) {
-        e.preventDefault();
-        if (!battleIntro.unskippable) skipBattleIntro();
         return;
-      }
-      if (battleTargetMode) {
+        }
+
+        // Space・Enter・Z で隣接した対象に話しかける/調べる
+        if (isConfirmKey(e)) {
+        e.preventDefault();
+
+        const adj = getAdjacentInteractable();
+
+        if (adj) {
+            adj.interact();
+        } else {
+            const boss = getAdjacentBoss();
+            if (boss) {
+            boss.interact();
+            }
+        }
+
+        return;
+        }
+
+        return;
+    }
+
+    // 装備メニュー
+    if (currentState === GameState.EQUIP) {
+        handleEquipInput(e);
+        return;
+    }
+
+    // 戦闘
+    if (currentState === GameState.BATTLE) {
+        if (battleIntro.active && isConfirmKey(e)) {
+        e.preventDefault();
+
+        if (!battleIntro.unskippable) {
+            skipBattleIntro();
+        }
+
+        return;
+        }
+
+        if (battleTargetMode) {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-          e.preventDefault();
-          moveTargetSelection(-1);
-          return;
+            e.preventDefault();
+            moveTargetSelection(-1);
+            return;
         }
+
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-          e.preventDefault();
-          moveTargetSelection(1);
-          return;
+            e.preventDefault();
+            moveTargetSelection(1);
+            return;
         }
-        if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
-          e.preventDefault();
-          confirmTargetSelection();
-          return;
+
+        if (isConfirmKey(e)) {
+            e.preventDefault();
+            confirmTargetSelection();
+            return;
         }
-        if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
-          e.preventDefault();
-          cancelTargetSelection();
-          return;
+
+        if (isCancelKey(e)) {
+            e.preventDefault();
+            cancelTargetSelection();
+            return;
         }
-      }
-      if (battleVictory.active && (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z')) {
+
+        return;
+        }
+
+        if (battleVictory.active && isConfirmKey(e)) {
         e.preventDefault();
         advanceBattleVictory();
         return;
-      }
-      if (heroTurn && !battleVictory.active && !battleVictory.pending) {
+        }
+
+        if (heroTurn && !battleVictory.active && !battleVictory.pending) {
         if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          moveBattleCommand(-1);
-          return;
+            e.preventDefault();
+            moveBattleCommand(-1);
+            return;
         }
+
         if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          moveBattleCommand(1);
-          return;
+            e.preventDefault();
+            moveBattleCommand(1);
+            return;
         }
-        if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
-          e.preventDefault();
-          confirmBattleCommand();
-          return;
+
+        if (isConfirmKey(e)) {
+            e.preventDefault();
+            confirmBattleCommand();
+            return;
         }
-      }
-    } else if (currentState === GameState.SHOP) {
-      if (e.key === 'ArrowUp') {
+
+        return;
+        }
+
+        return;
+    }
+
+    // ショップ
+    if (currentState === GameState.SHOP) {
+        if (e.key === 'ArrowUp') {
         e.preventDefault();
         moveShopCursor(-1);
         return;
-      }
-      if (e.key === 'ArrowDown') {
+        }
+
+        if (e.key === 'ArrowDown') {
         e.preventDefault();
         moveShopCursor(1);
         return;
-      }
-      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
+        }
+
+        if (isConfirmKey(e)) {
         e.preventDefault();
         confirmShopChoice();
         return;
-      }
-      if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
+        }
+
+        if (isCancelKey(e)) {
         e.preventDefault();
         closeShop();
         return;
-      }
-    } else if (currentState === GameState.TALK) {
-      // Space・Enter・Z・Escape でセリフを進める／会話を閉じる
-      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z'
-          || e.key === 'Escape') {
+        }
+
+        return;
+    }
+
+    // 会話
+    if (currentState === GameState.TALK) {
+        // 元の挙動維持：Space・Enter・Z・Escape で進める
+        if (isConfirmKey(e) || e.key === 'Escape') {
         e.preventDefault();
         advanceDialogue();
-      }
-    } else if (currentState === GameState.WIN) {
-      backToMap();
-    } else if (currentState === GameState.LOSE) {
-      continueAfterGameOver();
-    } else if (currentState === GameState.ENDING) {
-      resetGame();
-    }
-  });
+        return;
+        }
 
-  document.addEventListener('keyup', e => {
-    if (e.key === 'ArrowUp'    || e.key === 'w') keys.up = false;
-    if (e.key === 'ArrowDown'  || e.key === 's') keys.down = false;
-    if (e.key === 'ArrowLeft'  || e.key === 'a') keys.left = false;
-    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-  });
+        return;
+    }
+
+    // 勝利/敗北/エンディング
+    if (currentState === GameState.WIN) {
+        backToMap();
+        return;
+    }
+
+    if (currentState === GameState.LOSE) {
+        continueAfterGameOver();
+        return;
+    }
+
+    if (currentState === GameState.ENDING) {
+        resetGame();
+        return;
+    }
+    });
+
+    document.addEventListener('keyup', e => {
+    updateMoveKeyUp(e);
+    });
 
   // マップへ戻る
   function backToMap() {
