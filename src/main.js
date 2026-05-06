@@ -43,28 +43,7 @@ import {
   TITLE_MENU_ITEMS,
 } from './core/state.js';
 
-  const HERO_WALK_FRAMES = {
-    down: [
-      { x: 53, y: 27,  w: 92, h: 118 },
-      { x: 178, y: 27, w: 85, h: 118 },
-      { x: 295, y: 27, w: 83, h: 118 },
-    ],
-    left: [
-      { x: 52, y: 160, w: 75, h: 116 },
-      { x: 179, y: 161, w: 64, h: 115 },
-      { x: 289, y: 161, w: 80, h: 114 },
-    ],
-    right: [
-      { x: 65, y: 290, w: 75, h: 115 },
-      { x: 188, y: 290, w: 61, h: 116 },
-      { x: 299, y: 290, w: 76, h: 115 },
-    ],
-    up: [
-      { x: 62, y: 421, w: 78, h: 114 },
-      { x: 179, y: 421, w: 76, h: 114 },
-      { x: 296, y: 421, w: 79, h: 114 },
-    ],
-  };
+
 
 import {
   TILE_IMAGES,
@@ -334,6 +313,35 @@ import {
   drawDebugRect as drawDebugRectUI,
   drawDebugHitboxes as drawDebugHitboxesUI,
 } from './ui/debugUI.js';
+
+import {
+  drawChestFallback as drawChestFallbackUI,
+  drawChestEntity as drawChestEntityUI,
+  drawHouseFallback as drawHouseFallbackUI,
+  drawHouseEntity as drawHouseEntityUI,
+  drawDecorFallback as drawDecorFallbackUI,
+  drawCustomObject as drawCustomObjectUI,
+  drawObject as drawObjectUI,
+  drawDecorEntity as drawDecorEntityUI,
+  drawNPC as drawNPCUI,
+} from './ui/mapEntityUI.js';
+
+import {
+  SKILL_DEFS,
+} from './data/skills.js';
+
+import {
+  HERO_BATTLE_COMMANDS,
+} from './data/battleCommands.js';
+
+import {
+  PROLOGUE_LINES,
+} from './data/prologue.js';
+
+import {
+  HERO_WALK_FRAMES,
+} from './data/heroFrames.js';
+
 
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
@@ -1786,81 +1794,19 @@ function useElixir(target) {
   //   bodyCol = 体の色、hairCol = 髪の色（NPCごとに異なる）
   // ============================================================
   function drawNPC(px, py, sc, bodyCol, hairCol, spriteKey = null, drawW = null, drawH = null) {
-    ctx.save();
-
-    const resolvedDrawW = drawW || Math.round(32 * sc);
-    const resolvedDrawH = drawH || Math.round(32 * sc);
-    const img = spriteKey ? npcImgs[spriteKey] : null;
-    if (img && img._ready) {
-      ctx.drawImage(img, px, py, resolvedDrawW, resolvedDrawH);
-      ctx.restore();
-      return;
-    }
-
-    ctx.translate(px, py);
-    ctx.scale(resolvedDrawW / 32, resolvedDrawH / 32);
-
-    // ── 画像ベース描画（読み込み済みなら drawImage を優先） ────────────
-    // 注意: 画像使用時は bodyCol/hairCol による色変化は反映されません
-    if (spriteImgs.npc && spriteImgs.npc._ready) {
-      ctx.drawImage(spriteImgs.npc, 0, 0, 32, 32);
-      ctx.restore();
-      return;
-    }
-
-    // 足
-    ctx.fillStyle = '#444';
-    ctx.fillRect(10, 25, 5, 6);
-    ctx.fillRect(17, 25, 5, 6);
-
-    // 体（bodyColで色を変える）
-    ctx.fillStyle = bodyCol;
-    ctx.fillRect(9, 14, 14, 12);
-    ctx.fillStyle = shadeHex(bodyCol, 35);
-    ctx.fillRect(9, 14, 9, 2);
-    ctx.fillRect(9, 16, 3, 7);
-    ctx.fillStyle = shadeHex(bodyCol, -45);
-    ctx.fillRect(19, 17, 4, 9);
-    ctx.fillRect(12, 24, 11, 2);
-
-    // 腕（肌色）
-    ctx.fillStyle = '#ffcc99';
-    ctx.fillRect(5, 15, 5, 8);
-    ctx.fillRect(22, 15, 5, 8);
-    ctx.fillStyle = '#ffe0b8';
-    ctx.fillRect(5, 15, 3, 2);
-    ctx.fillRect(22, 15, 3, 2);
-    ctx.fillStyle = '#d99a66';
-    ctx.fillRect(8, 20, 2, 3);
-    ctx.fillRect(25, 20, 2, 3);
-
-    // 首・頭（肌色）
-    ctx.fillStyle = '#ffcc99';
-    ctx.fillRect(13, 11, 6, 4);
-    ctx.fillRect(9, 5, 14, 10);
-
-    // 髪（hairColで色を変える）
-    ctx.fillStyle = hairCol;
-    ctx.fillRect(9, 5, 14, 4);
-    ctx.fillRect(9, 5, 3, 8);
-    ctx.fillRect(20, 5, 3, 8);
-    ctx.fillStyle = shadeHex(hairCol, 35);
-    ctx.fillRect(9, 5, 9, 1);
-    ctx.fillRect(9, 6, 3, 4);
-    ctx.fillStyle = shadeHex(hairCol, -45);
-    ctx.fillRect(19, 8, 4, 1);
-    ctx.fillRect(20, 9, 3, 4);
-
-    // 目
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(12, 11, 2, 2);
-    ctx.fillRect(18, 11, 2, 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(12, 11, 1, 1);
-    ctx.fillRect(18, 11, 1, 1);
-
-    ctx.restore();
-  }
+  drawNPCUI(
+    ctx,
+    px,
+    py,
+    sc,
+    bodyCol,
+    hairCol,
+    spriteKey,
+    drawW,
+    drawH,
+    getMapEntityUIDeps()
+  );
+}
 
   // ============================================================
   // タイル1枚を描画する
@@ -2777,200 +2723,21 @@ function useElixir(target) {
     };
   }
 
-  function drawDecorFallback(kind, px, py, drawW, drawH) {
-    const base = Math.min(drawW, drawH);
-    const ox = Math.round((drawW - base) / 2);
-    const oy = Math.round(drawH - base);
-    const x = px + ox;
-    const y = py + oy;
-    const p = n => Math.max(1, Math.round(n * base / 32));
-    if (kind === 'flower' || kind === 'flower_red') {
-      ctx.fillStyle = '#3a6e30';
-      ctx.fillRect(x + p(15), y + p(16), p(2), p(8));
-      ctx.fillStyle = kind === 'flower_red' ? '#d93636' : '#ff66aa';
-      ctx.fillRect(x + p(12), y + p(12), p(4), p(4));
-      ctx.fillRect(x + p(17), y + p(12), p(4), p(4));
-      ctx.fillRect(x + p(14), y + p(9), p(4), p(4));
-      ctx.fillStyle = '#ffee00';
-      ctx.fillRect(x + p(15), y + p(13), p(3), p(3));
-    } else if (kind === 'small_rock' || kind === 'rock_cluster') {
-      ctx.fillStyle = '#5d5d58';
-      ctx.fillRect(x + p(8), y + p(15), p(16), p(8));
-      ctx.fillStyle = '#8b8b82';
-      ctx.fillRect(x + p(10), y + p(12), p(11), p(6));
-      ctx.fillStyle = '#44443f';
-      ctx.fillRect(x + p(17), y + p(20), p(6), p(3));
-      if (kind === 'rock_cluster') {
-        ctx.fillStyle = '#6f6f68';
-        ctx.fillRect(x + p(3), y + p(18), p(8), p(6));
-        ctx.fillRect(x + p(21), y + p(16), p(7), p(7));
-      }
-    } else if (kind === 'barrel') {
-      ctx.fillStyle = '#4a2a16';
-      ctx.fillRect(x + p(9), y + p(7), p(14), p(22));
-      ctx.fillStyle = '#8a4d24';
-      ctx.fillRect(x + p(11), y + p(6), p(10), p(22));
-      ctx.fillStyle = '#2d1a0d';
-      ctx.fillRect(x + p(9), y + p(11), p(14), p(2));
-      ctx.fillRect(x + p(9), y + p(22), p(14), p(2));
-    } else if (kind === 'crate') {
-      ctx.fillStyle = '#5a351b';
-      ctx.fillRect(x + p(6), y + p(8), p(20), p(20));
-      ctx.fillStyle = '#9a6330';
-      ctx.fillRect(x + p(8), y + p(10), p(16), p(16));
-      ctx.fillStyle = '#4a2a15';
-      ctx.fillRect(x + p(15), y + p(10), p(2), p(16));
-      ctx.fillRect(x + p(8), y + p(17), p(16), p(2));
-    } else if (kind === 'root') {
-      ctx.fillStyle = '#4a2d18';
-      ctx.fillRect(x + p(3), y + p(17), p(13), p(3));
-      ctx.fillRect(x + p(14), y + p(18), p(11), p(2));
-      ctx.fillRect(x + p(21), y + p(14), p(6), p(2));
-      ctx.fillStyle = '#6a4324';
-      ctx.fillRect(x + p(6), y + p(17), p(8), p(1));
-    } else if (kind === 'campfire_ash') {
-      ctx.fillStyle = '#2f2f2c';
-      ctx.fillRect(x + p(9), y + p(20), p(14), p(4));
-      ctx.fillStyle = '#5b5148';
-      ctx.fillRect(x + p(7), y + p(22), p(5), p(3));
-      ctx.fillRect(x + p(20), y + p(21), p(5), p(3));
-      ctx.fillStyle = '#3d281b';
-      ctx.fillRect(x + p(10), y + p(15), p(12), p(3));
-      ctx.fillRect(x + p(13), y + p(12), p(3), p(10));
-      ctx.fillStyle = '#8a3020';
-      ctx.fillRect(x + p(16), y + p(18), p(3), p(2));
-    } else if (kind === 'dead_tree' || kind === 'dead_tree_dark') {
-      const dark = kind === 'dead_tree_dark';
-      ctx.fillStyle = dark ? '#21191a' : '#3a2a1e';
-      ctx.fillRect(x + p(14), y + p(8), p(5), p(22));
-      ctx.fillRect(x + p(8), y + p(12), p(10), p(3));
-      ctx.fillRect(x + p(17), y + p(15), p(9), p(3));
-      ctx.fillStyle = dark ? '#39242a' : '#5a3b25';
-      ctx.fillRect(x + p(15), y + p(9), p(2), p(18));
-      if (dark) {
-        ctx.fillStyle = '#151113';
-        ctx.fillRect(x + p(6), y + p(10), p(8), p(2));
-        ctx.fillRect(x + p(20), y + p(13), p(7), p(2));
-        ctx.fillStyle = '#5b2436';
-        ctx.fillRect(x + p(16), y + p(8), p(1), p(7));
-      }
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(x + p(8), y + p(29), p(18), p(2));
-    } else if (kind === 'throne') {
-      ctx.fillStyle = '#4a0a0a';
-      ctx.fillRect(x + p(6), y + p(4), p(20), p(24));
-      ctx.fillStyle = '#7a1a1a';
-      ctx.fillRect(x + p(8), y + p(6), p(16), p(20));
-      ctx.fillStyle = '#c8a020';
-      ctx.fillRect(x + p(6), y + p(4), p(20), p(2));
-      ctx.fillRect(x + p(6), y + p(4), p(2), p(24));
-      ctx.fillRect(x + p(24), y + p(4), p(2), p(24));
-      ctx.fillStyle = '#2a1a0a';
-      ctx.fillRect(x + p(8), y + p(24), p(16), p(6));
-    } else if (kind === 'dark_crystal') {
-      ctx.fillStyle = '#1a0a2a';
-      ctx.fillRect(x + p(13), y + p(18), p(6), p(12));
-      ctx.fillStyle = '#5a10a0';
-      ctx.fillRect(x + p(11), y + p(8), p(10), p(14));
-      ctx.fillStyle = '#8a20d0';
-      ctx.fillRect(x + p(13), y + p(6), p(6), p(10));
-      ctx.fillStyle = 'rgba(180,80,255,0.4)';
-      ctx.fillRect(x + p(14), y + p(7), p(3), p(8));
-    } else if (kind === 'dark_pillar') {
-      ctx.fillStyle = '#1c1828';
-      ctx.fillRect(x + p(10), y + p(2), p(12), p(28));
-      ctx.fillStyle = '#2e2840';
-      ctx.fillRect(x + p(11), y + p(3), p(10), p(26));
-      ctx.fillStyle = '#3e3450';
-      ctx.fillRect(x + p(12), y + p(4), p(4), p(24));
-      ctx.fillStyle = '#120e1e';
-      ctx.fillRect(x + p(8), y + p(2), p(16), p(3));
-      ctx.fillRect(x + p(8), y + p(27), p(16), p(3));
-    } else if (kind === 'iron_door') {
-      ctx.fillStyle = '#1a1a22';
-      ctx.fillRect(x + p(6), y + p(2), p(20), p(28));
-      ctx.fillStyle = '#2a2a36';
-      ctx.fillRect(x + p(7), y + p(3), p(18), p(26));
-      ctx.fillStyle = '#0e0e16';
-      ctx.fillRect(x + p(15), y + p(2), p(2), p(28));
-      ctx.fillStyle = '#5a4a10';
-      ctx.fillRect(x + p(8), y + p(14), p(5), p(3));
-      ctx.fillRect(x + p(19), y + p(14), p(5), p(3));
-    } else if (kind === 'demon_altar') {
-      ctx.fillStyle = '#1a0a0a';
-      ctx.fillRect(x + p(4), y + p(16), p(24), p(12));
-      ctx.fillStyle = '#2e1212';
-      ctx.fillRect(x + p(6), y + p(12), p(20), p(8));
-      ctx.fillStyle = '#8a0000';
-      ctx.fillRect(x + p(10), y + p(8), p(12), p(8));
-      ctx.fillStyle = 'rgba(255,60,0,0.5)';
-      ctx.fillRect(x + p(13), y + p(6), p(6), p(6));
-      ctx.fillStyle = '#c8a020';
-      ctx.fillRect(x + p(4), y + p(12), p(24), p(2));
-    } else if (kind === 'forest_entrance') {
-      // 森の入口：緑の木製アーチ（フォールバック）
-      ctx.fillStyle = '#2a4a1c';
-      ctx.fillRect(x + p(4),  y + p(8),  p(5), p(24));  // 左柱
-      ctx.fillRect(x + p(23), y + p(8),  p(5), p(24));  // 右柱
-      ctx.fillStyle = '#1e3a12';
-      ctx.fillRect(x + p(4),  y + p(7),  p(24), p(4));  // 上梁
-      ctx.fillStyle = '#3d7a28';
-      ctx.fillRect(x + p(6),  y + p(3),  p(20), p(5));  // 葉：下段
-      ctx.fillStyle = '#4d9a32';
-      ctx.fillRect(x + p(9),  y + p(1),  p(14), p(4));  // 葉：上段
-      ctx.fillStyle = '#66bb44';
-      ctx.fillRect(x + p(12), y,          p(8),  p(3));  // 葉：天頂
-      ctx.fillStyle = '#99ee66';
-      ctx.fillRect(x + p(14), y + p(1),   p(2),  p(2));  // 光の点
-      ctx.fillRect(x + p(9),  y + p(4),   p(2),  p(2));
-      ctx.fillRect(x + p(20), y + p(3),   p(2),  p(2));
-    } else if (kind === 'dark_castle_object') {
-      ctx.fillStyle = 'rgba(0,0,0,0.32)';
-      ctx.fillRect(x + p(3), y + p(29), p(26), p(3));
-      ctx.fillStyle = '#120b18';
-      ctx.fillRect(x + p(6), y + p(11), p(20), p(18));
-      ctx.fillStyle = '#21152a';
-      ctx.fillRect(x + p(8), y + p(8), p(16), p(21));
-      ctx.fillStyle = '#0a0710';
-      ctx.fillRect(x + p(5), y + p(14), p(4), p(15));
-      ctx.fillRect(x + p(23), y + p(14), p(4), p(15));
-      ctx.fillStyle = '#2f1d3e';
-      ctx.fillRect(x + p(7), y + p(6), p(5), p(8));
-      ctx.fillRect(x + p(20), y + p(6), p(5), p(8));
-      ctx.fillStyle = '#4b164f';
-      ctx.fillRect(x + p(14), y + p(17), p(4), p(12));
-      ctx.fillStyle = '#8a20d0';
-      ctx.fillRect(x + p(15), y + p(18), p(2), p(8));
-    }
-  }
+function drawDecorFallback(kind, px, py, drawW, drawH) {
+  drawDecorFallbackUI(ctx, kind, px, py, drawW, drawH);
+}
 
-  function drawDecorEntity(decor) {
-    const { w: drawW, h: drawH } = getDecorDrawSize(decor.kind, decor);
-    const { tileSX, tileSY, x: drawX, y: drawY } = getGroundedTileDrawRect(decor, drawW, drawH);
-    if (drawX + drawW < 0 || drawX > VIEW_W || drawY + drawH < 0 || drawY > VIEW_H) return;
+function drawDecorEntity(decor) {
+  drawDecorEntityUI(ctx, decor, getMapEntityUIDeps());
+}
 
-    drawObject(decor.kind, drawX, drawY, drawW, drawH, decor);
-  }
+function drawCustomObject(kind, px, py, drawW, drawH, object = {}) {
+  drawCustomObjectUI(ctx, kind, px, py, drawW, drawH, object);
+}
 
-  function drawCustomObject(kind, px, py, drawW, drawH, object = {}) {
-    if (kind === 'torch') return;
-    drawDecorFallback(kind, px, py, drawW, drawH, object);
-  }
-
-  function drawObject(kind, px, py, drawW, drawH, object = {}) {
-    const imgKey = getDecorImageKey(kind);
-    const img = tileImgs[imgKey];
-    if (img && img._ready) {
-      ctx.drawImage(img, px, py, drawW, drawH);
-      return;
-    }
-    const objectImg = objectImgs[imgKey];
-    if (objectImg && objectImg._ready) {
-      ctx.drawImage(objectImg, px, py, drawW, drawH);
-      return;
-    }
-    drawCustomObject(kind, px, py, drawW, drawH, object);
-  }
+function drawObject(kind, px, py, drawW, drawH, object = {}) {
+  drawObjectUI(ctx, kind, px, py, drawW, drawH, object, getMapEntityUIDeps());
+}
 
   function getHouseDrawRect(house) {
     const camX = renderCamera.col * TILE_RENDER;
@@ -2997,72 +2764,13 @@ function useElixir(target) {
     };
   }
 
-  function drawHouseFallback(house, px, py, drawW, drawH) {
-    const p = n => Math.max(1, Math.round(n * drawW / 64));
-    const isShadow = String(house.variant || '').startsWith('shadow');
-    const isInn = house.variant === 'inn' || house.variant === 'shadowInn';
-    const isShop = house.variant === 'shop' || house.variant === 'shadowShop';
-    const roof = isShadow ? '#36284a' : isInn ? '#7a2b38' : isShop ? '#3b5f45' : '#8f2730';
-    const roofHi = isShadow ? '#5c4a78' : isInn ? '#b64655' : isShop ? '#5d9868' : '#c83a43';
-    const wall = isShadow ? '#6f6680' : '#c79a63';
-    const wallHi = isShadow ? '#8d839b' : '#e0bd82';
-    const trim = isShadow ? '#2c2438' : '#62432a';
-    const baseY = py + drawH;
+ function drawHouseFallback(house, px, py, drawW, drawH) {
+  drawHouseFallbackUI(ctx, house, px, py, drawW, drawH);
+}
 
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(px + p(9), baseY - p(6), drawW - p(18), p(6));
-
-    ctx.fillStyle = trim;
-    ctx.fillRect(px + p(8), py + p(24), drawW - p(16), p(15));
-    ctx.fillStyle = roof;
-    ctx.fillRect(px + p(5), py + p(31), drawW - p(10), p(26));
-    ctx.fillRect(px + p(13), py + p(16), drawW - p(26), p(22));
-    ctx.fillStyle = roofHi;
-    ctx.fillRect(px + p(9), py + p(34), drawW - p(18), p(8));
-    ctx.fillRect(px + p(17), py + p(20), drawW - p(34), p(6));
-
-    ctx.fillStyle = wall;
-    ctx.fillRect(px + p(10), py + p(54), drawW - p(20), drawH - p(58));
-    ctx.fillStyle = wallHi;
-    ctx.fillRect(px + p(14), py + p(58), drawW - p(28), p(13));
-    ctx.fillStyle = trim;
-    ctx.fillRect(px + p(10), baseY - p(13), drawW - p(20), p(9));
-
-    ctx.fillStyle = '#5b351e';
-    ctx.fillRect(px + Math.round(drawW / 2) - p(7), baseY - p(42), p(14), p(38));
-    ctx.fillStyle = '#7b4a28';
-    ctx.fillRect(px + Math.round(drawW / 2) - p(5), baseY - p(39), p(10), p(35));
-    ctx.fillStyle = '#e4b84a';
-    ctx.fillRect(px + Math.round(drawW / 2) + p(3), baseY - p(23), p(2), p(2));
-
-    ctx.fillStyle = '#26384d';
-    ctx.fillRect(px + p(17), baseY - p(41), p(12), p(11));
-    ctx.fillRect(px + drawW - p(29), baseY - p(41), p(12), p(11));
-    ctx.fillStyle = '#9fd3ff';
-    ctx.fillRect(px + p(19), baseY - p(39), p(8), p(7));
-    ctx.fillRect(px + drawW - p(27), baseY - p(39), p(8), p(7));
-
-    if (isInn || isShop) {
-      ctx.fillStyle = '#2b1a0c';
-      ctx.fillRect(px + Math.round(drawW / 2) - p(15), py + p(43), p(30), p(16));
-      ctx.fillStyle = isInn ? '#f0f4ff' : '#e0b84a';
-      ctx.fillRect(px + Math.round(drawW / 2) - p(12), py + p(45), p(24), p(11));
-      ctx.fillStyle = isInn ? '#557799' : '#7a4a20';
-      ctx.fillRect(px + Math.round(drawW / 2) - p(7), py + p(49), p(14), p(3));
-    }
-  }
-
-  function drawHouseEntity(house) {
-    const { tileSX, tileSY, x: drawX, y: drawY } = getHouseDrawRect(house);
-    if (drawX + house.drawW < 0 || drawX > VIEW_W || drawY + house.drawH < 0 || drawY > VIEW_H) return;
-
-    const img = objectImgs[house.spriteKey];
-    if (img && img._ready) {
-      ctx.drawImage(img, drawX, drawY, house.drawW, house.drawH);
-      return;
-    }
-    drawHouseFallback(house, drawX, drawY, house.drawW, house.drawH);
-  }
+function drawHouseEntity(house) {
+  drawHouseEntityUI(ctx, house, getMapEntityUIDeps());
+}
 
  function drawDebugRect(rect, color, camX, camY) {
   drawDebugRectUI(ctx, rect, color, camX, camY);
@@ -3087,55 +2795,32 @@ function chestImageKey(chest) {
   return chestImageKeySystem(chest, flags);
 }
 
+function getMapEntityUIDeps() {
+  return {
+    DEFAULT_CHEST_DRAW_SIZE,
+    getGroundedTileDrawRect,
+    getHouseDrawRect,
+    getDecorDrawSize,
+    VIEW_W,
+    VIEW_H,
+    flags,
+    objectImgs,
+    tileImgs,
+    npcImgs,
+    spriteImgs,
+    chestImageKey,
+    getDecorImageKey,
+    shadeHex,
+  };
+}
+
   function drawChestFallback(px, py, drawW, drawH, opened) {
-    const base = Math.min(drawW, drawH);
-    const x = px + Math.round((drawW - base) / 2);
-    const y = py + Math.round(drawH - base);
-    const p = n => Math.max(1, Math.round(n * base / 32));
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(x + p(7), y + p(27), p(18), p(3));
+  drawChestFallbackUI(ctx, px, py, drawW, drawH, opened);
+}
 
-    if (opened) {
-      ctx.fillStyle = '#3a2418';
-      ctx.fillRect(x + p(7), y + p(17), p(18), p(9));
-      ctx.fillStyle = '#1f120c';
-      ctx.fillRect(x + p(9), y + p(20), p(14), p(4));
-      ctx.fillStyle = '#9b6a38';
-      ctx.fillRect(x + p(8), y + p(13), p(16), p(5));
-      ctx.fillStyle = '#d0a040';
-      ctx.fillRect(x + p(15), y + p(17), p(3), p(4));
-      return;
-    }
-
-    ctx.fillStyle = '#5c2f18';
-    ctx.fillRect(x + p(7), y + p(13), p(18), p(13));
-    ctx.fillStyle = '#8b4a20';
-    ctx.fillRect(x + p(8), y + p(14), p(16), p(11));
-    ctx.fillStyle = '#b86a28';
-    ctx.fillRect(x + p(8), y + p(10), p(16), p(6));
-    ctx.fillStyle = '#d88a3a';
-    ctx.fillRect(x + p(9), y + p(11), p(6), p(2));
-    ctx.fillStyle = '#5c2f18';
-    ctx.fillRect(x + p(7), y + p(17), p(18), p(2));
-    ctx.fillRect(x + p(7), y + p(24), p(18), p(2));
-    ctx.fillStyle = '#e0b84a';
-    ctx.fillRect(x + p(15), y + p(17), p(3), p(5));
-  }
-
-  function drawChestEntity(chest) {
-    const drawW = chest.drawW || DEFAULT_CHEST_DRAW_SIZE;
-    const drawH = chest.drawH || DEFAULT_CHEST_DRAW_SIZE;
-    const { tileSX, tileSY, x: drawX, y: drawY } = getGroundedTileDrawRect(chest, drawW, drawH);
-    if (drawX + drawW < 0 || drawX > VIEW_W || drawY + drawH < 0 || drawY > VIEW_H) return;
-
-    const opened = !!flags[chest.flagKey];
-    const img = objectImgs[chestImageKey(chest)];
-    if (img && img._ready) {
-      ctx.drawImage(img, drawX, drawY, drawW, drawH);
-      return;
-    }
-    drawChestFallback(drawX, drawY, drawW, drawH, opened);
-  }
+function drawChestEntity(chest) {
+  drawChestEntityUI(ctx, chest, getMapEntityUIDeps());
+}
 
   function normalizeChestItemId(item) {
   return normalizeChestItemIdSystem(item);
@@ -4354,21 +4039,7 @@ function grantChestReward(reward) {
   // ============================================================
   // プロローグ
   // ============================================================
-  const PROLOGUE_LINES = [
-    'かつて、この世界は光に満ちていた。',
-    '豊かな大地に人々の笑い声が響き、夜空には無数の星が瞬いていた。',
-    'しかし、その平和はある日突然——終わりを告げた。',
-    '',
-    '魔王ヴァルドール。',
-    '太古の封印を打ち砕いた闇の王は、世界に影を落とした。',
-    '村は焼かれ、森は枯れ、人々は恐怖に怯えながら生きることを強いられた。',
-    '',
-    '勇者たちは立ち向かった。しかし、誰一人として戻らなかった。',
-    '世界はゆっくりと、絶望の中に沈んでいった。',
-    '',
-    'それでも——誰かが立ち上がらなければならない。',
-    'その者の物語が、今ここから始まる。',
-  ];
+ 
 
   function startPrologue() {
     prologueState = { active: true, index: -1, lineStartTime: 0, cooldown: false };
@@ -4588,17 +4259,7 @@ function refreshStatusBar() {
     requestAnimationFrame(loop); // 次のフレームへ
   }
 
-  // ============================================================
-  // バトルボタンの表示・非表示（動的コマンド）
-  // ============================================================
-  const HERO_BATTLE_COMMANDS = [
-    { label: '⚔ こうげき',          actionId: 'attack' },
-    { label: '✨ ファイア (MP5)',    actionId: 'fire'   },
-    { label: 'ポーション',            actionId: 'potion' },
-    { label: 'エーテル',              actionId: 'ether'  },
-    { label: 'エリクサー',            actionId: 'elixir' },
-    { label: '💨 にげる',            actionId: 'run'    },
-  ];
+
 
   function getAllyBattleCommands(ally) {
     return (ally.skills || []).map(skill => {
@@ -5454,16 +5115,6 @@ function buyGreenRobe() {
   const HEAL_MP_COST = 4;
   const LEAF_STORM_MP_COST = 6;
 
-  const SKILL_DEFS = {
-    attack:    { name: 'こうげき',       mp: 0, desc: '敵1体に物理ダメージ' },
-    fire:      { name: 'ファイア',       mp: 5, desc: '敵全体に炎ダメージ' },
-    heal:      { name: 'かいふく',       mp: 4, desc: '自分のHPを回復する' },
-    leafStorm: { name: 'リーフストーム', mp: 6, desc: '敵全体に葉ダメージ' },
-    potion:    { name: 'ポーション',     mp: 0, desc: 'HPを25回復' },
-    ether:     { name: 'エーテル',       mp: 0, desc: 'MPを10回復' },
-    elixir:    { name: 'エリクサー',     mp: 0, desc: 'HP+MPを両方回復' },
-    run:       { name: 'にげる',         mp: 0, desc: '戦闘から逃げる' },
-  };
 
   function handleActorCommandChoice(actionId) {
     if (!heroTurn || !battleCommandActor || battleVictory.active || battleVictory.pending) return;
