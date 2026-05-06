@@ -115,3 +115,17 @@ export function getBlockingEntityForBox(box, deps) {
     return isColliding(box, getCollisionBox(entity));
   }) || null;
 }
+
+export function setupHeroEntity(hero, deps) {
+  const {
+    centeredBottomHitbox,
+    updateMove,
+    drawHeroEntity,
+  } = deps;
+
+  hero.type = 'hero';
+  hero.hitbox = centeredBottomHitbox(hero.w, hero.h);
+  hero.update = updateMove;
+  hero.draw = drawHeroEntity;
+  hero.interact = function() {};
+}
