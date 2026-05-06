@@ -252,6 +252,7 @@ import {
   getShopIntroLine as getShopIntroLineSystem,
   getNpcRole as getNpcRoleSystem,
   getDialogueCompleteAction,
+  shouldOpenUnreadSign,
 } from './systems/dialogueSystem.js';
 
 import {
@@ -414,6 +415,12 @@ import {
   restoreCurrentMapFromSave,
   restoreAlliesFromSave,
 } from './systems/saveSystem.js';
+
+import {
+  shouldStartEncounter,
+  createEncounterTerrainKey,
+  tileHasEncounter as tileHasEncounterSystem,
+} from './systems/encounterSystem.js';
 
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
@@ -3512,9 +3519,17 @@ function grantChestReward(reward) {
     return TILE_META[tile] ? !TILE_META[tile].passable : false;
   }
 
+  function getEncounterSystemDeps() {
+  return {
+    currentMap: runtimeState.currentMap,
+    dungeonMap,
+    T,
+    TILE_META,
+  };
+}
+
   function tileHasEncounter(tile) {
-    if (runtimeState.currentMap === dungeonMap && tile === T.STONE) return true;
-    return !!(TILE_META[tile] && TILE_META[tile].encounter);
+    return tileHasEncounterSystem(tile, getEncounterSystemDeps());
   }
 
   function canPlaceHeroAt(px, py) {
@@ -6060,37 +6075,79 @@ const NPC_EVENTS = createNpcEvents({
     return getAdjacentEntity('boss');
   }
 
+  function scheduleEncounterBattle() {
+  if (encounterTimer) return;
+
+  encounterTimer = setTimeout(() => {
+    encounterTimer = null;
+    startBattle();
+  }, 80);
+}
+
+function handleEventEntityInteraction(heroBox) {
+  const eventEntity = getEventEntityForBox(heroBox);
+
+  if (!eventEntity) {
+    lastEventEntityKey = null;
+    return false;
+  }
+
+  const key = getEntityKey(eventEntity);
+
+  if (key !== lastEventEntityKey) {
+    lastEventEntityKey = key;
+    eventEntity.interact();
+  }
+
+  return true;
+}
+
+function checkRandomEncounterAtHeroTile() {
+  const tx = heroTileX();
+  const ty = heroTileY();
+  const tile = tileAt(tx, ty);
+  const terrainKey = createEncounterTerrainKey(getCurrentMapId(), tx, ty);
+
+  const encounterResult = shouldStartEncounter({
+    heroJustExited: hero.justExited,
+    encounterTimer,
+    terrainKey,
+    lastEncounterTerrainKey,
+    encounterTable: resolveEncounterTable(),
+    tile,
+    tileHasEncounter,
+    encounterRate: ENC_RATE,
+    random: Math.random,
+  });
+
+  lastEncounterTerrainKey = encounterResult.nextLastEncounterTerrainKey;
+
+  if (encounterResult.shouldStart) {
+    scheduleEncounterBattle();
+  }
+}
+
+function handleUnreadSignInteraction(heroBox) {
+  const unreadSign = getCollidingEntity(heroBox, 'sign');
+
+  if (!shouldOpenUnreadSign(unreadSign, flags)) {
+    return false;
+  }
+
+  openSignRead(unreadSign);
+  return true;
+}
+
   function checkTileEvents() {
     const heroBox = getCollisionBox(hero);
-    const eventEntity = getEventEntityForBox(heroBox);
-    if (eventEntity) {
-      const key = getEntityKey(eventEntity);
-      if (key !== lastEventEntityKey) {
-        lastEventEntityKey = key;
-        eventEntity.interact();
-      }
-      return;
+    if (handleEventEntityInteraction(heroBox)) {
+        return;
     }
-    lastEventEntityKey = null;
-
-    const unreadSign = getCollidingEntity(heroBox, 'sign');
-    if (unreadSign && unreadSign.flagKey && !flags[unreadSign.flagKey]) {
-      openSignRead(unreadSign);
-      return;
+    if (handleUnreadSignInteraction(heroBox)) {
+        return;
     }
-
-    const tx = heroTileX();
-    const ty = heroTileY();
-    const tile = tileAt(tx, ty);
-    if (hero.justExited > 0) return;
-    if (encounterTimer) return;
-    const terrainKey = `${getCurrentMapId()}:${tx},${ty}`;
-    if (terrainKey === lastEncounterTerrainKey) return;
-    lastEncounterTerrainKey = terrainKey;
-    if (resolveEncounterTable().length > 0 && tileHasEncounter(tile) && Math.random() < ENC_RATE) {
-      encounterTimer = setTimeout(() => { encounterTimer = null; startBattle(); }, 80);
-    }
-  }
+    checkRandomEncounterAtHeroTile();
+}
 
   function getRestoreQuestAndFlagsDeps() {
   return {

@@ -94,3 +94,7 @@ export function getDialogueCompleteAction(npc) {
 
   return { type: 'none' };
 }
+
+export function shouldOpenUnreadSign(sign, flags) {
+  return !!(sign && sign.flagKey && !flags[sign.flagKey]);
+}
