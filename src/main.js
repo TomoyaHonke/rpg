@@ -366,12 +366,44 @@ import {
   heroFootTileX as heroFootTileXSystem,
   heroFootTileY as heroFootTileYSystem,
   setHeroTilePosition as setHeroTilePositionSystem,
+  setHeroStartPosition as setHeroStartPositionSystem,
 } from './systems/heroSystem.js';
 
 import {
   tileToPx as tileToPxUtil,
   pxToTile as pxToTileUtil,
+  normalizeSavedPoint as normalizeSavedPointUtil,
+  mapCols as mapColsUtil,
+  mapRows as mapRowsUtil,
 } from './utils/position.js';
+
+import {
+  getMapDefById as getMapDefByIdSystem,
+  getMapTilesById as getMapTilesByIdSystem,
+  getCurrentMapDef as getCurrentMapDefSystem,
+  resolveEncounterTable as resolveEncounterTableSystem,
+  resolveValue as resolveValueSystem,
+  getTransitionDef as getTransitionDefSystem,
+  getCurrentMapId as getCurrentMapIdSystem,
+} from './systems/mapSystem.js';
+
+import {
+  rng as rngUtil,
+} from './utils/random.js';
+
+import {
+  shadeHex as shadeHexUtil,
+} from './utils/color.js';
+
+import {
+  drawText as drawTextUI,
+  wrapTextLines as wrapTextLinesUI,
+} from './ui/textUI.js';
+
+import {
+  drawBar as drawBarUI,
+  drawThinBar as drawThinBarUI,
+} from './ui/gaugeUI.js';
 
 
   function joinAlly(id) {
@@ -677,20 +709,14 @@ let prologueState = createInitialPrologueState();
   // ============================================================
   // ユーティリティ
   // ============================================================
-  function shadeHex(hex, amount) {
-    const raw = hex.replace('#', '');
-    const num = parseInt(raw, 16);
-    const r = Math.max(0, Math.min(255, (num >> 16) + amount));
-    const g = Math.max(0, Math.min(255, ((num >> 8) & 255) + amount));
-    const b = Math.max(0, Math.min(255, (num & 255) + amount));
-
-    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-  }
+function shadeHex(hex, amount) {
+  return shadeHexUtil(hex, amount);
+}
 
   // min〜max のランダム整数を返す
-  function rng(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
+function rng(min, max) {
+  return rngUtil(min, max);
+}
 
   function tileToPx(n) {
   return tileToPxUtil(n, TILE_RENDER);
@@ -724,124 +750,90 @@ function setHeroTile(x, y) {
 }
 
   function setStartPosition() {
-    runtimeState.currentMap = START_MAP;
-    runtimeState.currentHouseId = null;
-    hero.x = tileToPx(START_POS.x);
-    hero.y = tileToPx(START_POS.y);
-    setHeroDirection('down');
-    hero.justExited = 90;
-    snapDrawPos();
-  }
+  runtimeState.currentMap = START_MAP;
+  runtimeState.currentHouseId = null;
+  setHeroStartPositionSystem(hero, START_POS, tileToPx);
+  setHeroDirection('down');
+  hero.justExited = 90;
+  snapDrawPos();
+}
 
   function normalizeSavedPoint(point, fallback) {
-    const src = point || fallback;
-    const x = Number.isFinite(src.x) ? src.x : fallback.x;
-    const y = Number.isFinite(src.y) ? src.y : fallback.y;
-    const exitDir = src.exitDir || fallback.exitDir;
-    if (x >= 0 && x < COLS && y >= 0 && y < ROWS && Number.isInteger(x) && Number.isInteger(y)) {
-      return { x: tileToPx(x), y: tileToPx(y), exitDir };
-    }
-    return { x, y, exitDir };
-  }
+  return normalizeSavedPointUtil(point, fallback, {
+    COLS,
+    ROWS,
+    tileToPx,
+  });
+}
 
-  function getCurrentMapId() {
-    if (runtimeState.currentMap === townMap) return 'town';
-    if (runtimeState.currentMap === dungeonMap) return 'dungeon';
-    if (runtimeState.currentMap === field2Map) return 'field2';
-    if (runtimeState.currentMap === shadowTownMap) return 'shadowTown';
-    if (runtimeState.currentMap === cursedForestMap) return 'cursedForest';
-    if (runtimeState.currentMap === outpostMap) return 'outpost';
-    if (runtimeState.currentMap === castleMap) return 'castle';
-    if (runtimeState.currentMap === leafaForestMap) return 'leafaForest';
-    if (isHouseMap(runtimeState.currentMap)) return `house:${runtimeState.currentHouseId || 'unknown'}`;
-    return 'field';
-  }
+function getMapSystemDeps() {
+  return {
+    runtimeState,
+    townMap,
+    dungeonMap,
+    field2Map,
+    shadowTownMap,
+    cursedForestMap,
+    outpostMap,
+    castleMap,
+    leafaForestMap,
+    isHouseMap,
+  };
+}
+
+function getCurrentMapId() {
+  return getCurrentMapIdSystem(getMapSystemDeps());
+}
 
   function getMapDefById(mapId) {
-    return MAP_DEFS[mapId] || MAP_DEFS.field;
-  }
+  return getMapDefByIdSystem(mapId, MAP_DEFS);
+}
 
-  function getMapTilesById(mapId) {
-    return getMapDefById(mapId).tiles;
-  }
+function getMapTilesById(mapId) {
+  return getMapTilesByIdSystem(mapId, MAP_DEFS);
+}
 
-  function resolveValue(value, ...args) {
-    return typeof value === 'function' ? value(...args) : value;
-  }
+function resolveValue(value, ...args) {
+  return resolveValueSystem(value, ...args);
+}
 
-  function getTransitionDef(transitionId) {
-    return MAP_TRANSITIONS[transitionId] || null;
-  }
+function getTransitionDef(transitionId) {
+  return getTransitionDefSystem(transitionId, MAP_TRANSITIONS);
+}
 
-  function getCurrentMapDef() {
-    return getMapDefById(getCurrentMapId());
-  }
+function getCurrentMapDef() {
+  return getCurrentMapDefSystem(getCurrentMapId, getMapDefById);
+}
 
-  function resolveEncounterTable(mapDef = getCurrentMapDef()) {
-    const table = mapDef.encounterTable;
-    if (typeof table === 'function') return table();
-    return Array.isArray(table) ? table : [];
-  }
+function resolveEncounterTable(mapDef = getCurrentMapDef()) {
+  return resolveEncounterTableSystem(mapDef);
+}
 
-  function mapCols(map = runtimeState.currentMap) {
-    return map[0] ? map[0].length : COLS;
-  }
+function mapCols(map = runtimeState.currentMap) {
+  return mapColsUtil(map, COLS);
+}
 
-  function mapRows(map = runtimeState.currentMap) {
-    return map.length || ROWS;
-  }
+function mapRows(map = runtimeState.currentMap) {
+  return mapRowsUtil(map, ROWS);
+}
 
   // シャドウ付きテキストを描画する
-  function txt(s, x, y, col = '#fff', sz = 14) {
-    ctx.font = `${sz}px "Courier New", monospace`;
-    ctx.fillStyle = '#000';
-    ctx.fillText(s, x + 1, y + 1); // 影
-    ctx.fillStyle = col;
-    ctx.fillText(s, x, y);
-  }
+function txt(s, x, y, col = '#fff', sz = 14) {
+  drawTextUI(ctx, s, x, y, col, sz);
+}
 
-  function wrapTextLines(text, maxWidth, maxLines, fontSize = 10) {
-    const source = String(text || '');
-    const lines = [];
-    const chars = Array.from(source);
-    let line = '';
-    ctx.save();
-    ctx.font = `${fontSize}px "Courier New", monospace`;
-    for (const ch of chars) {
-      const test = line + ch;
-      if (line && ctx.measureText(test).width > maxWidth) {
-        lines.push(line);
-        line = ch;
-        if (lines.length >= maxLines) break;
-      } else {
-        line = test;
-      }
-    }
-    if (lines.length < maxLines && line) lines.push(line);
-    ctx.restore();
-    return lines.slice(0, maxLines);
-  }
+function wrapTextLines(text, maxWidth, maxLines, fontSize = 10) {
+  return wrapTextLinesUI(ctx, text, maxWidth, maxLines, fontSize);
+}
 
   // HPバー（横長のゲージ）を描画する
-  function drawBar(x, y, w, cur, max, col) {
-    ctx.fillStyle = '#111';
-    ctx.fillRect(x, y, w, 10);
-    ctx.fillStyle = col;
-    ctx.fillRect(x, y, Math.round(w * cur / max), 10);
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, w, 10);
-  }
+function drawBar(x, y, w, cur, max, col) {
+  drawBarUI(ctx, x, y, w, cur, max, col);
+}
 
-  function drawThinBar(x, y, w, cur, max, col) {
-    ctx.fillStyle = '#111';
-    ctx.fillRect(x, y, w, 6);
-    ctx.fillStyle = col;
-    ctx.fillRect(x, y, Math.round(w * cur / max), 6);
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, w, 6);
-  }
+function drawThinBar(x, y, w, cur, max, col) {
+  drawThinBarUI(ctx, x, y, w, cur, max, col);
+}
 
   function getCurrentWeapon() {
   return getCurrentWeaponSystem(hero, WEAPONS);

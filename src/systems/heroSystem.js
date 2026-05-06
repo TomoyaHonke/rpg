@@ -48,3 +48,8 @@ export function setHeroTilePosition(hero, x, y, tileToPx) {
   hero.x = tileToPx(x);
   hero.y = tileToPx(y);
 }
+
+export function setHeroStartPosition(hero, START_POS, tileToPx) {
+  hero.x = tileToPx(START_POS.x);
+  hero.y = tileToPx(START_POS.y);
+}
