@@ -422,6 +422,30 @@ import {
   tileHasEncounter as tileHasEncounterSystem,
 } from './systems/encounterSystem.js';
 
+import {
+  getEventEntityForBox as getEventEntityForBoxSystem,
+  getEntityKey as getEntityKeySystem,
+  getCollidingEntity as getCollidingEntitySystem,
+  getBlockingEntityForBox as getBlockingEntityForBoxSystem,
+} from './systems/interactionSystem.js';
+
+import {
+  isColliding as isCollidingSystem,
+  centeredBottomHitbox as centeredBottomHitboxSystem,
+  entranceHitbox as entranceHitboxSystem,
+  getCollisionBox as getCollisionBoxSystem,
+} from './systems/collisionSystem.js';
+
+import {
+  tileAt as tileAtSystem,
+  isBlockedTile as isBlockedTileSystem,
+  canPlaceHeroAt as canPlaceHeroAtSystem,
+  updateHeroVelocityFromKeys as updateHeroVelocityFromKeysSystem,
+  applyHeroVelocity as applyHeroVelocitySystem,
+  tickHeroJustExited as tickHeroJustExitedSystem,
+  syncHeroDrawPosition as syncHeroDrawPositionSystem,
+} from './systems/movementSystem.js';
+
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
     const def = ALLY_DEFS[id];
@@ -2562,44 +2586,26 @@ function useElixir(target) {
   // ============================================================
   // エンティティ管理
   // ============================================================
-  function isColliding(a, b) {
-    return a.x < b.x + b.w
-      && a.x + a.w > b.x
-      && a.y < b.y + b.h
-      && a.y + a.h > b.y;
-  }
+function isColliding(a, b) {
+  return isCollidingSystem(a, b);
+}
 
-  function centeredBottomHitbox(w, h, wRatio = FOOT_HITBOX.wRatio, hRatio = FOOT_HITBOX.hRatio) {
-    const hitW = Math.round(w * wRatio);
-    const hitH = Math.round(h * hRatio);
-    return {
-      x: Math.round((w - hitW) / 2),
-      y: h - hitH,
-      w: hitW,
-      h: hitH,
-    };
-  }
+function centeredBottomHitbox(
+  w,
+  h,
+  wRatio = FOOT_HITBOX.wRatio,
+  hRatio = FOOT_HITBOX.hRatio
+) {
+  return centeredBottomHitboxSystem(w, h, wRatio, hRatio);
+}
 
-  function entranceHitbox(w, h) {
-    const hitW = Math.round(w * ENTRANCE_HITBOX.wRatio);
-    const hitH = Math.round(h * ENTRANCE_HITBOX.hRatio);
-    return {
-      x: Math.round((w - hitW) / 2),
-      y: h - hitH,
-      w: hitW,
-      h: hitH,
-    };
-  }
+function entranceHitbox(w, h) {
+  return entranceHitboxSystem(w, h, ENTRANCE_HITBOX);
+}
 
-  function getCollisionBox(entity, x = entity.x, y = entity.y) {
-    const hitbox = entity.hitbox || { x: 0, y: 0, w: entity.w, h: entity.h };
-    return {
-      x: x + hitbox.x,
-      y: y + hitbox.y,
-      w: hitbox.w,
-      h: hitbox.h,
-    };
-  }
+function getCollisionBox(entity, x = entity.x, y = entity.y) {
+  return getCollisionBoxSystem(entity, x, y);
+}
 
   function heroInteractionBox() {
     const box = getCollisionBox(hero);
@@ -3385,21 +3391,12 @@ function grantChestReward(reward) {
   }
 
   function getCollidingEntity(box, type = null) {
-    syncEntities();
-    return entities.find(entity => {
-      if (entity.type === 'hero') return false;
-      if (type && entity.type !== type) return false;
-      return isColliding(box, getCollisionBox(entity));
-    }) || null;
-  }
+  return getCollidingEntitySystem(box, type, getInteractionSystemDeps());
+}
 
-  function getBlockingEntityForBox(box) {
-    syncEntities();
-    return entities.find(entity => {
-      if (entity.type === 'hero' || !entity.blocking) return false;
-      return isColliding(box, getCollisionBox(entity));
-    }) || null;
-  }
+function getBlockingEntityForBox(box) {
+  return getBlockingEntityForBoxSystem(box, getInteractionSystemDeps());
+}
 
   function getAdjacentEntity(types) {
     const allowed = Array.isArray(types) ? types : [types];
@@ -3411,43 +3408,27 @@ function grantChestReward(reward) {
     }) || null;
   }
 
+  function getInteractionSystemDeps() {
+  return {
+    hero,
+    heroFootTileX,
+    heroFootTileY,
+    syncEntities,
+    entities,
+    pxToTile,
+    TILE_RENDER,
+    isColliding,
+    getCollisionBox,
+  };
+}
+
   function getEventEntityForBox(box) {
-    const eventTypes = [
-      'townEntrance', 'townExit', 'dungeonEntrance', 'dungeonExit', 'houseEntrance', 'houseExit',
-      'field2Entrance', 'field1Return', 'shadowTownEntrance', 'shadowTownExit', 'forestEntrance', 'forestExit',
-      'outpostEntrance', 'outpostExit', 'castleEntrance', 'castleExit',
-      'leafaForestEntrance', 'leafaForestExit',
-    ];
-    const tileBasedEventTypes = [
-      'townEntrance', 'townExit', 'dungeonEntrance', 'dungeonExit',
-      'field2Entrance', 'field1Return', 'shadowTownEntrance', 'shadowTownExit',
-      'forestEntrance', 'forestExit', 'outpostEntrance', 'outpostExit',
-      'castleEntrance', 'castleExit',
-      'leafaForestEntrance', 'leafaForestExit',
-    ];
-    const directionalEntranceTypes = ['dungeonEntrance'];
-    const footTileX = heroFootTileX();
-    const footTileY = heroFootTileY();
-    syncEntities();
-    return entities.find(entity => {
-      if (!eventTypes.includes(entity.type)) return false;
-      if (tileBasedEventTypes.includes(entity.type)) {
-        const ex = pxToTile(entity.x);
-        const ey = pxToTile(entity.y);
-        if (directionalEntranceTypes.includes(entity.type)) {
-          return hero.dir === entity.exitDir && footTileX === ex && footTileY === ey + 1;
-        }
-        const ew = Math.max(1, Math.ceil(entity.w / TILE_RENDER));
-        const eh = Math.max(1, Math.ceil(entity.h / TILE_RENDER));
-        return footTileX >= ex && footTileX < ex + ew && footTileY >= ey && footTileY < ey + eh;
-      }
-      return isColliding(box, getCollisionBox(entity));
-    }) || null;
-  }
+  return getEventEntityForBoxSystem(box, getInteractionSystemDeps());
+}
 
   function getEntityKey(entity) {
-    return `${entity.type}:${entity.x},${entity.y},${entity.w},${entity.h}`;
-  }
+  return getEntityKeySystem(entity);
+}
 
   function startExitCooldown(frames = 24) {
     hero.justExited = frames;
@@ -3509,15 +3490,35 @@ function grantChestReward(reward) {
   // ============================================================
   // 速度ベースの移動を毎フレーム更新（loop() から呼び出す）
   // ============================================================
-  function tileAt(x, y) {
-    return runtimeState.currentMap[y] && runtimeState.currentMap[y][x];
-  }
 
-  function isBlockedTile(x, y) {
-    if (x < 0 || x >= mapCols() || y < 0 || y >= mapRows()) return true;
-    const tile = tileAt(x, y);
-    return TILE_META[tile] ? !TILE_META[tile].passable : false;
-  }
+  function getMovementSystemDeps() {
+  return {
+    currentMap: runtimeState.currentMap,
+    mapCols,
+    mapRows,
+    TILE_META,
+
+    hero,
+    getCollisionBox,
+    pxToTile,
+    isBlockedTile,
+    getBlockingEntityForBox,
+
+    keys,
+    currentState,
+    mapState: GameState.MAP,
+    moveSpeed: MOVE_SPEED,
+    setHeroDirection,
+  };
+}
+
+function tileAt(x, y) {
+  return tileAtSystem(runtimeState.currentMap, x, y);
+}
+
+function isBlockedTile(x, y) {
+  return isBlockedTileSystem(x, y, getMovementSystemDeps());
+}
 
   function getEncounterSystemDeps() {
   return {
@@ -3533,53 +3534,40 @@ function grantChestReward(reward) {
   }
 
   function canPlaceHeroAt(px, py) {
-    const heroBox = getCollisionBox(hero, px, py);
-    const left = heroBox.x;
-    const top = heroBox.y;
-    const right = left + heroBox.w - 1;
-    const bottom = top + heroBox.h - 1;
-    const corners = [
-      [pxToTile(left), pxToTile(top)],
-      [pxToTile(right), pxToTile(top)],
-      [pxToTile(left), pxToTile(bottom)],
-      [pxToTile(right), pxToTile(bottom)],
-    ];
-    for (const [tx, ty] of corners) {
-      if (isBlockedTile(tx, ty)) return false;
-    }
-    if (getBlockingEntityForBox(heroBox)) return false;
-    return true;
-  }
+  return canPlaceHeroAtSystem(px, py, getMovementSystemDeps());
+}
 
   function updateHeroVelocityFromKeys() {
-    hero.vx = 0;
-    hero.vy = 0;
-    if (currentState !== GameState.MAP) return;
-    if (keys.left)  hero.vx -= MOVE_SPEED;
-    if (keys.right) hero.vx += MOVE_SPEED;
-    if (keys.up)    hero.vy -= MOVE_SPEED;
-    if (keys.down)  hero.vy += MOVE_SPEED;
-    if (hero.vx && hero.vy) {
-      const d = Math.SQRT1_2;
-      hero.vx *= d;
-      hero.vy *= d;
-    }
-    if (Math.abs(hero.vx) > Math.abs(hero.vy)) setHeroDirection(hero.vx < 0 ? 'left' : 'right');
-    else if (hero.vy) setHeroDirection(hero.vy < 0 ? 'up' : 'down');
-  }
+  updateHeroVelocityFromKeysSystem(getMovementSystemDeps());
+}
 
-  function updateMove() {
-    if (hero.justExited > 0) hero.justExited--;
-    updateHeroVelocityFromKeys();
-    const prevX = hero.x;
-    const prevY = hero.y;
-    if (hero.vx && canPlaceHeroAt(hero.x + hero.vx, hero.y)) hero.x += hero.vx;
-    if (hero.vy && canPlaceHeroAt(hero.x, hero.y + hero.vy)) hero.y += hero.vy;
-    updateHeroWalkAnimation(hero.x !== prevX || hero.y !== prevY);
-    hero.drawX = hero.x;
-    hero.drawY = hero.y;
-    if (currentState === GameState.MAP) checkTileEvents();
+function tickHeroJustExited() {
+  tickHeroJustExitedSystem(hero);
+}
+
+function syncHeroDrawPosition() {
+  syncHeroDrawPositionSystem(hero);
+}
+
+function applyHeroVelocity() {
+  return applyHeroVelocitySystem(hero, canPlaceHeroAt);
+}
+
+function updateMove() {
+  tickHeroJustExited();
+
+  updateHeroVelocityFromKeys();
+
+  const moveResult = applyHeroVelocity();
+
+  updateHeroWalkAnimation(moveResult.moved);
+
+  syncHeroDrawPosition();
+
+  if (currentState === GameState.MAP) {
+    checkTileEvents();
   }
+}
 
   // ============================================================
   // マップ画面を描画する
