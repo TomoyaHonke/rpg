@@ -405,6 +405,15 @@ import {
   drawThinBar as drawThinBarUI,
 } from './ui/gaugeUI.js';
 
+import {
+  createSaveData,
+  readSaveData,
+  restoreHeroFromSave,
+  restoreQuestAndFlagsFromSave,
+  restoreReturnPointsFromSave,
+  restoreCurrentMapFromSave,
+  restoreAlliesFromSave,
+} from './systems/saveSystem.js';
 
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
@@ -6083,225 +6092,183 @@ const NPC_EVENTS = createNpcEvents({
     }
   }
 
+  function getRestoreQuestAndFlagsDeps() {
+  return {
+    flags,
+    setQuestState: state => {
+      slimeKills = state.slimeKills;
+      questDone = state.questDone;
+      questRewardMsg = state.questRewardMsg;
+    },
+  };
+}
 
-  function saveGame() {
-    ensureInventory();
-    const data = {
-      hero: {
-        x: hero.x, y: hero.y,
-        vx: hero.vx, vy: hero.vy,
-        hp: hero.hp, maxHp: hero.maxHp,
-        mp: hero.mp, maxMp: hero.maxMp,
-        atk: hero.atk, def: hero.def, speed: hero.speed,
-        weapon: hero.weapon,
-        armor: hero.armor,
-        weaponsOwned: hero.weaponsOwned,
-        armorsOwned: hero.armorsOwned,
-        level: hero.level, exp: hero.exp,
-        gold: hero.gold, potions: hero.potions,
-        inventory: { ...hero.inventory },
-        dir: hero.dir,
-        direction: hero.direction,
-      },
-      coordVersion: 2,
-      quest: {
-        slimeKills,
-        questDone,
-        questRewardMsg,
-      },
-      flags: { ...flags },
-      returns: {
-        town: runtimeState.townReturn,
-        dungeon: runtimeState.dungeonReturn,
-        house: runtimeState.houseReturn,
-        field2: runtimeState.field2Return,
-        shadowTown: runtimeState.shadowTownReturn,
-        cursedForest: runtimeState.cursedForestReturn,
-        outpost: runtimeState.outpostReturn,
-        castle: runtimeState.castleReturn,
-      },
-      houseId: runtimeState.currentHouseId,
-      map: getCurrentMapId(),
-      allies: allies.map(a => ({
-        id:      a.id,
-        hp:      a.hp,      maxHp:   a.maxHp,
-        mp:      a.mp,      maxMp:   a.maxMp,
-        level:   a.level,   exp:     a.exp,
-        baseAtk: a.baseAtk, baseDef: a.baseDef,
-        baseSpeed: a.baseSpeed,
-        weaponsOwned: Array.isArray(a.weaponsOwned) ? [...a.weaponsOwned] : [],
-        armorsOwned: Array.isArray(a.armorsOwned) ? [...a.armorsOwned] : [],
-        equippedWeapon: a.equippedWeapon,
-        equippedArmor:  a.equippedArmor,
-        flags:   { ...a.flags },
-      })),
-    };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    showNotice('セーブしました');
+function getRestoreHeroDeps() {
+  return {
+    hero,
+    WEAPONS,
+    ARMORS,
+    HERO_WALK_IDLE_FRAME,
+    ensureInventory,
+    normalizeSavedPoint,
+    tileToPx,
+    isItemAllowedForActor,
+    setHeroDirection,
+  };
+}
+
+  function getSaveSystemDeps() {
+  return {
+    hero,
+    flags,
+    runtimeState,
+    allies,
+    slimeKills,
+    questDone,
+    questRewardMsg,
+    getCurrentMapId,
+  };
+}
+
+function getRestoreReturnPointsDeps() {
+  return {
+    runtimeState,
+    normalizeSavedPoint,
+  };
+}
+
+function getRestoreCurrentMapDeps() {
+  return {
+    runtimeState,
+    houseMaps,
+    getMapTilesById,
+    isHouseMap,
+    heroTileX,
+    heroTileY,
+    mapCols,
+    mapRows,
+    hero,
+    tileToPx,
+  };
+}
+
+function getRestoreAlliesDeps() {
+  return {
+    ALLY_DEFS,
+    WEAPONS,
+    ARMORS,
+    isItemAllowedForActor,
+    flags,
+    setAllies: restoredAllies => {
+      allies = restoredAllies;
+    },
+  };
+}
+
+function saveGame() {
+  ensureInventory();
+
+  const data = createSaveData(getSaveSystemDeps());
+
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  showNotice('セーブしました');
+}
+
+function resetStateAfterLoad() {
+  setGameState(GameState.MAP);
+
+  foe = null;
+  battleEnemies = [];
+  battleTurnQueue = [];
+  pendingPartyActions = [];
+  battlePartyQueue = [];
+  battleCommandActor = null;
+  battleTargetMode = null;
+  selectedTargetIndex = 0;
+
+  clearBattleIntro();
+
+  talkNpc = null;
+  talkPage = 0;
+  activeSign = null;
+  readPage = 0;
+
+  equipCursor = 0;
+  equipMenuMode = 'main';
+  equipCharacterIndex = 0;
+  charaTabIndex = 0;
+  equipSlotCursor = 0;
+  itemCursor = 0;
+  itemUseId = 'potion';
+  itemTargetIndex = 0;
+  shopCursor = 0;
+
+  snapDrawPos();
+  hideBtns();
+}
+
+function startNewGameFromLoad() {
+  setStartPosition();
+  setGameState(GameState.MAP);
+
+  foe = null;
+  battleEnemies = [];
+  battleTurnQueue = [];
+  battleTargetMode = null;
+  selectedTargetIndex = 0;
+
+  clearBattleIntro();
+
+  talkNpc = null;
+  talkPage = 0;
+  activeSign = null;
+  readPage = 0;
+
+  equipCursor = 0;
+  equipMenuMode = 'main';
+  equipCharacterIndex = 0;
+  charaTabIndex = 0;
+  equipSlotCursor = 0;
+  itemCursor = 0;
+  itemUseId = 'potion';
+  itemTargetIndex = 0;
+  shopCursor = 0;
+
+  hideBtns();
+}
+
+function restoreGameDataFromSave(data) {
+  restoreHeroFromSave(data, getRestoreHeroDeps());
+  restoreQuestAndFlagsFromSave(data, getRestoreQuestAndFlagsDeps());
+  restoreReturnPointsFromSave(data, getRestoreReturnPointsDeps());
+  restoreCurrentMapFromSave(data, getRestoreCurrentMapDeps());
+  restoreAlliesFromSave(data, getRestoreAlliesDeps());
+}
+
+function loadGame() {
+  const saveResult = readSaveData(localStorage, SAVE_KEY);
+
+ if (!saveResult.ok && saveResult.reason === 'empty') {
+  startNewGameFromLoad();
+  showNotice('セーブデータがありません');
+  return;
+}
+
+  if (!saveResult.ok) {
+    showNotice('ロードに失敗しました');
+    return;
   }
 
-  function loadGame() {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) {
-      setStartPosition();
-      setGameState(GameState.MAP);
-      foe = null;
-      battleEnemies = [];
-      battleTurnQueue = [];
-      battleTargetMode = null;
-      selectedTargetIndex = 0;
-      clearBattleIntro();
-    talkNpc = null;
-      talkPage = 0;
-      activeSign = null;
-      readPage = 0;
-      equipCursor = 0;
-      equipMenuMode = 'main';
-      equipCharacterIndex = 0;
-      charaTabIndex = 0;
-      equipSlotCursor = 0;
-      itemCursor = 0;
-      itemUseId = 'potion';
-      itemTargetIndex = 0;
-      shopCursor = 0;
-      hideBtns();
-      showNotice('セーブデータがありません');
-      return;
-    }
-    try {
-      const data = JSON.parse(raw);
-      if (data.hero) Object.assign(hero, data.hero);
-      hero.speed = hero.speed ?? 10;
-      hero.potions = hero.potions ?? 0;
-      ensureInventory();
-      if (data.coordVersion !== 2) {
-        const p = normalizeSavedPoint({ x: hero.x, y: hero.y }, { x: tileToPx(1), y: tileToPx(1) });
-        hero.x = p.x;
-        hero.y = p.y;
-      }
-      if (!WEAPONS[hero.weapon]) hero.weapon = 'woodSword';
-      if (!ARMORS[hero.armor]) hero.armor = 'travelerClothes';
-      if (!isItemAllowedForActor(WEAPONS[hero.weapon], 'hero')) hero.weapon = 'woodSword';
-      if (!isItemAllowedForActor(ARMORS[hero.armor], 'hero')) hero.armor = 'travelerClothes';
-      hero.weaponsOwned = Array.isArray(hero.weaponsOwned) ? hero.weaponsOwned.filter(id => WEAPONS[id]) : ['woodSword'];
-      hero.armorsOwned = Array.isArray(hero.armorsOwned) ? hero.armorsOwned.filter(id => ARMORS[id]) : ['travelerClothes'];
-      if (!hero.weaponsOwned.includes('woodSword')) hero.weaponsOwned.unshift('woodSword');
-      if (!hero.armorsOwned.includes('travelerClothes')) hero.armorsOwned.unshift('travelerClothes');
-      if (!hero.weaponsOwned.includes(hero.weapon)) hero.weaponsOwned.push(hero.weapon);
-      if (!hero.armorsOwned.includes(hero.armor)) hero.armorsOwned.push(hero.armor);
-      setHeroDirection(hero.direction || hero.dir || 'down');
-      hero.walkFrame = HERO_WALK_IDLE_FRAME;
-      hero.walkTimer = 0;
-      hero.vx = 0;
-      hero.vy = 0;
-      if (data.quest) {
-        slimeKills = data.quest.slimeKills || 0;
-        questDone = !!data.quest.questDone;
-        questRewardMsg = data.quest.questRewardMsg || '';
-      }
-      // flags（後方互換: 旧セーブの bossDefeated/chestOpened も読み込む）
-      if (data.flags) {
-        Object.assign(flags, data.flags);
-        if (flags.outpostQuestDone) flags.talkedToOldBlacksmith = true;
-      } else {
-        flags.defeatedDarkKnight = !!data.bossDefeated;
-        flags.chest1Opened = !!data.chestOpened;
-      }
-      if (data.returns) {
-        runtimeState.townReturn = normalizeSavedPoint(data.returns.town, runtimeState.townReturn);
-        runtimeState.dungeonReturn = normalizeSavedPoint(data.returns.dungeon, runtimeState.dungeonReturn);
-        runtimeState.houseReturn = normalizeSavedPoint(data.returns.house, runtimeState.houseReturn);
-        if (data.returns.field2) runtimeState.field2Return = normalizeSavedPoint(data.returns.field2, runtimeState.field2Return);
-        if (data.returns.shadowTown) runtimeState.shadowTownReturn = normalizeSavedPoint(data.returns.shadowTown, runtimeState.shadowTownReturn);
-        if (data.returns.cursedForest) runtimeState.cursedForestReturn = normalizeSavedPoint(data.returns.cursedForest, runtimeState.cursedForestReturn);
-        if (data.returns.outpost) runtimeState.outpostReturn = normalizeSavedPoint(data.returns.outpost, runtimeState.outpostReturn);
-        if (data.returns.castle) runtimeState.castleReturn = normalizeSavedPoint(data.returns.castle, runtimeState.castleReturn);
-      } else if (data.runtimeState.fieldReturn) {
-        runtimeState.townReturn = normalizeSavedPoint(data.runtimeState.fieldReturn, runtimeState.townReturn);
-        runtimeState.dungeonReturn = normalizeSavedPoint(data.runtimeState.fieldReturn, runtimeState.dungeonReturn);
-      }
-      runtimeState.currentHouseId = data.houseId && houseMaps[data.houseId] ? data.houseId : null;
-      if (typeof data.map === 'string' && data.map.startsWith('house:')) {
-        const savedHouseId = data.map.slice('house:'.length);
-        if (houseMaps[savedHouseId]) runtimeState.currentHouseId = savedHouseId;
-      }
-      if (data.map === 'house' && !runtimeState.currentHouseId) runtimeState.currentHouseId = 'west';
-      runtimeState.currentMap = typeof data.map === 'string' && data.map.startsWith('house:') && runtimeState.currentHouseId
-        ? houseMaps[runtimeState.currentHouseId]
-        : data.map === 'house' ? houseMaps[runtimeState.currentHouseId]
-        : getMapTilesById(data.map);
-      if (isHouseMap(runtimeState.currentMap) && (heroTileX() < 0 || heroTileX() >= mapCols() || heroTileY() < 0 || heroTileY() >= mapRows())) {
-        hero.x = tileToPx(3);
-        hero.y = tileToPx(4);
-      }
-      // 仲間データを復元
-      allies = [];
-      if (Array.isArray(data.allies)) {
-        for (const saved of data.allies) {
-          if (saved.id === 'mia') saved.id = 'leafa';
-          const def = ALLY_DEFS[saved.id];
-          if (def) {
-            const ally = {
-              ...def,
-              weaponsOwned: Array.isArray(def.weaponsOwned) ? [...def.weaponsOwned] : [],
-              armorsOwned: Array.isArray(def.armorsOwned) ? [...def.armorsOwned] : [],
-              flags: { ...def.flags, hasAlly: true },
-            };
-            if (typeof saved.hp      === 'number') ally.hp      = saved.hp;
-            if (typeof saved.maxHp   === 'number') ally.maxHp   = saved.maxHp;
-            if (typeof saved.mp      === 'number') ally.mp      = saved.mp;
-            if (typeof saved.maxMp   === 'number') ally.maxMp   = saved.maxMp;
-            if (typeof saved.level   === 'number') ally.level   = saved.level;
-            if (typeof saved.exp     === 'number') ally.exp     = saved.exp;
-            if (typeof saved.baseAtk === 'number') ally.baseAtk = saved.baseAtk;
-            if (typeof saved.baseDef === 'number') ally.baseDef = saved.baseDef;
-            if (typeof saved.baseSpeed === 'number') ally.baseSpeed = saved.baseSpeed;
-            if (Array.isArray(saved.weaponsOwned)) ally.weaponsOwned = saved.weaponsOwned.filter(id => WEAPONS[id] && isItemAllowedForActor(WEAPONS[id], 'leafa'));
-            if (Array.isArray(saved.armorsOwned)) ally.armorsOwned = saved.armorsOwned.filter(id => ARMORS[id] && isItemAllowedForActor(ARMORS[id], 'leafa'));
-            if (saved.equippedWeapon && WEAPONS[saved.equippedWeapon]) ally.equippedWeapon = saved.equippedWeapon;
-            if (saved.equippedArmor && ARMORS[saved.equippedArmor]) ally.equippedArmor = saved.equippedArmor;
-            if (saved.flags) Object.assign(ally.flags, saved.flags);
-            if (!isItemAllowedForActor(WEAPONS[ally.equippedWeapon], ally.id) && ally.weaponsOwned.length) ally.equippedWeapon = ally.weaponsOwned[0];
-            if (!isItemAllowedForActor(ARMORS[ally.equippedArmor], ally.id) && ally.armorsOwned.length) ally.equippedArmor = ally.armorsOwned[0];
-            allies.push(ally);
-          }
-        }
-      }
-      // 旧セーブ互換：仲間にリーファがいれば加入フラグを立てる
-      if (allies.some(a => a.id === 'leafa' && a.flags && a.flags.hasAlly)) {
-        flags.leafaJoined = true;
-        flags.leafaRescueDone = true;
-      }
-      setGameState(GameState.MAP);
-      foe = null;
-      battleEnemies       = [];
-      battleTurnQueue     = [];
-      pendingPartyActions = [];
-      battlePartyQueue    = [];
-      battleCommandActor  = null;
-      battleTargetMode    = null;
-      selectedTargetIndex = 0;
-      clearBattleIntro();
-      talkNpc = null;
-      talkPage = 0;
-      activeSign = null;
-      readPage = 0;
-      equipCursor = 0;
-      equipMenuMode = 'main';
-      equipCharacterIndex = 0;
-      charaTabIndex = 0;
-      equipSlotCursor = 0;
-      itemCursor = 0;
-      itemUseId = 'potion';
-      itemTargetIndex = 0;
-      shopCursor = 0;
-      snapDrawPos();
-      hideBtns();
-      showNotice('ロードしました');
-    } catch (e) {
-      showNotice('ロードに失敗しました');
-    }
+  try {
+        const data = saveResult.data;
+
+        restoreGameDataFromSave(data);
+        resetStateAfterLoad();
+        showNotice('ロードしました');
+  } catch (e) {
+    showNotice('ロードに失敗しました');
   }
+}
 
   function openEquipMenu() {
   equipCursor = 0;
