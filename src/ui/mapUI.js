@@ -30,6 +30,50 @@ export function drawSignEntity(sign, deps) {
 }
 
 
+export function genericTileFallback(ctx, tileContext) {
+  ctx.save();
+
+  const {
+    x,
+    y,
+    TILE_RENDER,
+    drawType,
+  } = tileContext;
+  const p = n => Math.max(1, Math.round(n * TILE_RENDER / 32));
+  const palette = {
+    water: '#1d4f88',
+    cave_water: '#152942',
+    tree: '#2f5e35',
+    cave_wall: '#272421',
+    house_wall: '#4b3020',
+    castle_wall: '#242037',
+    castle_wall_edge: '#242037',
+    mountain: '#4e5549',
+    poison_swamp: '#354827',
+    dead_grass: '#66713d',
+    cave_floor: '#34302b',
+    house_floor: '#735231',
+    castle_floor: '#332640',
+    throne_floor: '#4c2438',
+  };
+  const baseCol = palette[drawType] || '#6f7f54';
+
+  ctx.fillStyle = baseCol;
+  ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, TILE_RENDER - 1, TILE_RENDER - 1);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.fillRect(x + p(5), y + p(7), p(6), p(1));
+  ctx.fillRect(x + p(19), y + p(21), p(5), p(1));
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
+  ctx.fillRect(x + p(9), y + p(24), p(4), p(1));
+  ctx.fillRect(x + p(23), y + p(10), p(3), p(1));
+
+  ctx.restore();
+}
+
 export function drawTileFallback(fallbackDrawer, tileContext) {
   fallbackDrawer(tileContext);
 }

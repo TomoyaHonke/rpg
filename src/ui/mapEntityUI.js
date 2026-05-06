@@ -358,11 +358,39 @@ export function drawDecorEntity(ctx, decor, deps) {
   drawObject(ctx, decor.kind, drawX, drawY, drawW, drawH, decor, deps);
 }
 
+export function genericNpcFallback(ctx, x, y, scale, bodyCol = '#666688', hairCol = '#3a2a1a') {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+
+  const body = bodyCol || '#666688';
+  const hair = hairCol || '#3a2a1a';
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+  ctx.fillRect(8, 28, 16, 3);
+  ctx.fillStyle = '#333333';
+  ctx.fillRect(10, 25, 5, 5);
+  ctx.fillRect(17, 25, 5, 5);
+  ctx.fillStyle = body;
+  ctx.fillRect(9, 14, 14, 12);
+  ctx.fillStyle = '#f0b98a';
+  ctx.fillRect(12, 7, 8, 7);
+  ctx.fillRect(13, 12, 6, 4);
+  ctx.fillStyle = hair;
+  ctx.fillRect(10, 5, 12, 5);
+  ctx.fillRect(9, 8, 3, 5);
+  ctx.fillRect(20, 8, 3, 5);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(12, 10, 2, 2);
+  ctx.fillRect(18, 10, 2, 2);
+
+  ctx.restore();
+}
+
 export function drawNPC(ctx, px, py, sc, bodyCol, hairCol, spriteKey = null, drawW = null, drawH = null, deps = {}) {
   const {
     npcImgs,
     spriteImgs,
-    shadeHex,
   } = deps;
 
   ctx.save();
@@ -377,65 +405,14 @@ export function drawNPC(ctx, px, py, sc, bodyCol, hairCol, spriteKey = null, dra
     return;
   }
 
-  ctx.translate(px, py);
-  ctx.scale(resolvedDrawW / 32, resolvedDrawH / 32);
-
   if (spriteImgs && spriteImgs.npc && spriteImgs.npc._ready) {
+    ctx.translate(px, py);
+    ctx.scale(resolvedDrawW / 32, resolvedDrawH / 32);
     ctx.drawImage(spriteImgs.npc, 0, 0, 32, 32);
     ctx.restore();
     return;
   }
 
-  // 足
-  ctx.fillStyle = '#444';
-  ctx.fillRect(10, 25, 5, 6);
-  ctx.fillRect(17, 25, 5, 6);
-
-  // 体
-  ctx.fillStyle = bodyCol;
-  ctx.fillRect(9, 14, 14, 12);
-  ctx.fillStyle = shadeHex(bodyCol, 35);
-  ctx.fillRect(9, 14, 9, 2);
-  ctx.fillRect(9, 16, 3, 7);
-  ctx.fillStyle = shadeHex(bodyCol, -45);
-  ctx.fillRect(19, 17, 4, 9);
-  ctx.fillRect(12, 24, 11, 2);
-
-  // 腕
-  ctx.fillStyle = '#ffcc99';
-  ctx.fillRect(5, 15, 5, 8);
-  ctx.fillRect(22, 15, 5, 8);
-  ctx.fillStyle = '#ffe0b8';
-  ctx.fillRect(5, 15, 3, 2);
-  ctx.fillRect(22, 15, 3, 2);
-  ctx.fillStyle = '#d99a66';
-  ctx.fillRect(8, 20, 2, 3);
-  ctx.fillRect(25, 20, 2, 3);
-
-  // 首・頭
-  ctx.fillStyle = '#ffcc99';
-  ctx.fillRect(13, 11, 6, 4);
-  ctx.fillRect(9, 5, 14, 10);
-
-  // 髪
-  ctx.fillStyle = hairCol;
-  ctx.fillRect(9, 5, 14, 4);
-  ctx.fillRect(9, 5, 3, 8);
-  ctx.fillRect(20, 5, 3, 8);
-  ctx.fillStyle = shadeHex(hairCol, 35);
-  ctx.fillRect(9, 5, 9, 1);
-  ctx.fillRect(9, 6, 3, 4);
-  ctx.fillStyle = shadeHex(hairCol, -45);
-  ctx.fillRect(19, 8, 4, 1);
-  ctx.fillRect(20, 9, 3, 4);
-
-  // 目
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(12, 11, 2, 2);
-  ctx.fillRect(18, 11, 2, 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(12, 11, 1, 1);
-  ctx.fillRect(18, 11, 1, 1);
-
   ctx.restore();
+  genericNpcFallback(ctx, px, py, Math.min(resolvedDrawW, resolvedDrawH) / 32, bodyCol, hairCol);
 }

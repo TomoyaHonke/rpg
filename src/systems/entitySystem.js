@@ -244,7 +244,7 @@ export function makeBossEntity(deps) {
     BOSS_POS,
     BOSS_OFF,
     centeredBottomHitbox,
-    drawDarkKnight,
+    drawEnemy,
     startBossBattle,
   } = deps;
 
@@ -260,7 +260,7 @@ export function makeBossEntity(deps) {
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawDarkKnight(view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'dark_knight' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, 5);
       }
     },
     interact() {
@@ -276,7 +276,7 @@ export function makeForestBossEntity(deps) {
     FOREST_BOSS_POS,
     BOSS_OFF,
     centeredBottomHitbox,
-    drawJurei,
+    drawEnemy,
     startForestBossBattle,
   } = deps;
 
@@ -292,7 +292,7 @@ export function makeForestBossEntity(deps) {
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawJurei(view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'jurei' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, 5);
       }
     },
     interact() {
@@ -308,7 +308,7 @@ export function makeDemonGeneralEntity(deps) {
     DEMON_GENERAL_POS,
     BOSS_OFF,
     centeredBottomHitbox,
-    drawDemonGeneral,
+    drawEnemy,
     startDemonGeneralBattle,
   } = deps;
 
@@ -324,7 +324,7 @@ export function makeDemonGeneralEntity(deps) {
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawDemonGeneral(view.sx + BOSS_OFF.x - 30, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'demon_general' }, view.sx + BOSS_OFF.x - 30, view.sy + BOSS_OFF.y, 5);
       }
     },
     interact() {
@@ -340,7 +340,7 @@ export function makeDemonLordEntity(deps) {
     CASTLE_BOSS_POS,
     BOSS_OFF,
     centeredBottomHitbox,
-    drawDemonLord,
+    drawEnemy,
     startDemonLordBattle,
   } = deps;
 
@@ -356,7 +356,7 @@ export function makeDemonLordEntity(deps) {
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawDemonLord(view.sx + BOSS_OFF.x - 30, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'demon_lord' }, view.sx + BOSS_OFF.x - 30, view.sy + BOSS_OFF.y, 5);
       }
     },
     interact() {
