@@ -366,11 +366,6 @@ export function handleKeyDown(event, deps) {
     return;
   }
 
-  if (currentState === GameState.WIN) {
-    backToMap();
-    return;
-  }
-
   if (currentState === GameState.LOSE) {
     continueAfterGameOver();
     return;

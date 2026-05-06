@@ -191,3 +191,244 @@ export function closeShop(deps) {
   setGameState(GameState.MAP);
   hideBtns();
 }
+
+export function getShopAction(itemId, deps) {
+  const {
+    buyPotion,
+    buyEther,
+    buyElixir,
+    buyLeatherArmor,
+    buySteelSword,
+    buyIronArmor,
+    buyMageStaff,
+    buyGreenRobe,
+    closeShop,
+  } = deps;
+
+  const actions = {
+    potion: buyPotion,
+    ether: buyEther,
+    elixir: buyElixir,
+    leatherArmor: buyLeatherArmor,
+    steelSword: buySteelSword,
+    ironArmor: buyIronArmor,
+    mage_staff: buyMageStaff,
+    green_robe: buyGreenRobe,
+    close: closeShop,
+  };
+
+  return actions[itemId] || closeShop;
+}
+
+export function getShopOptions(deps) {
+  const {
+    talkNpc,
+    SHOP_ITEMS,
+    getShopAction,
+  } = deps;
+
+  const shopType = talkNpc && talkNpc.npcId === 'shadow_shop_gray'
+    ? 'shadow'
+    : 'normal';
+
+  return SHOP_ITEMS[shopType].map(item => ({
+    ...item,
+    action: getShopAction(item.id),
+  }));
+}
+
+export function buyPotion(deps) {
+  const {
+    isShopAvailable,
+    buyConsumable,
+    hero,
+    changeItemCount,
+    getItemCount,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyConsumable({
+    hero,
+    price: 10,
+    itemId: 'potion',
+    itemName: 'ポーション',
+    amount: 1,
+    changeItemCount,
+    getItemCount,
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buyEther(deps) {
+  const {
+    isShopAvailable,
+    buyConsumable,
+    hero,
+    changeItemCount,
+    getItemCount,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyConsumable({
+    hero,
+    price: 15,
+    itemId: 'ether',
+    itemName: 'エーテル',
+    amount: 1,
+    changeItemCount,
+    getItemCount,
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buyElixir(deps) {
+  const {
+    isShopAvailable,
+    buyConsumable,
+    hero,
+    changeItemCount,
+    getItemCount,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyConsumable({
+    hero,
+    price: 100,
+    itemId: 'elixir',
+    itemName: 'エリクサー',
+    amount: 1,
+    changeItemCount,
+    getItemCount,
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buySteelSword(deps) {
+  const {
+    isShopAvailable,
+    buyHeroWeaponOnce,
+    hero,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyHeroWeaponOnce({
+    hero,
+    itemId: 'steelSword',
+    price: 130,
+    alreadyMessage: '鋼の剣は　もう持っている！',
+    successMessage: '鋼の剣を買った！',
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buyIronArmor(deps) {
+  const {
+    isShopAvailable,
+    buyHeroArmorOnce,
+    hero,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyHeroArmorOnce({
+    hero,
+    itemId: 'ironArmor',
+    price: 200,
+    alreadyMessage: '鉄のよろいは　もう持っている！',
+    successMessage: '鉄のよろいを買った！',
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buyLeatherArmor(deps) {
+  const {
+    isShopAvailable,
+    buyHeroArmorOnce,
+    hero,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyHeroArmorOnce({
+    hero,
+    itemId: 'leatherArmor',
+    price: 30,
+    alreadyMessage: '革よろいは　もう持っている！',
+    successMessage: '革よろいを買った！',
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buyMageStaff(deps) {
+  const {
+    isShopAvailable,
+    buyAllyWeaponOnce,
+    hero,
+    allies,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyAllyWeaponOnce({
+    hero,
+    allies,
+    allyId: 'leafa',
+    itemId: 'mage_staff',
+    price: 150,
+    noAllyMessage: 'リーファがいない！',
+    alreadyMessage: '魔法の杖は　もう持っている！',
+    successMessage: '魔法の杖を買った！',
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}
+
+export function buyGreenRobe(deps) {
+  const {
+    isShopAvailable,
+    buyAllyArmorOnce,
+    hero,
+    allies,
+    setShopState,
+  } = deps;
+
+  if (!isShopAvailable()) return false;
+
+  const result = buyAllyArmorOnce({
+    hero,
+    allies,
+    allyId: 'leafa',
+    itemId: 'green_robe',
+    price: 200,
+    noAllyMessage: 'リーファがいない！',
+    alreadyMessage: '草色のローブは　もう持っている！',
+    successMessage: '草色のローブを買った！',
+  });
+
+  setShopState({ shopMsg: result.message });
+  return result.ok;
+}

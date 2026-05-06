@@ -53,7 +53,6 @@ export function drawCurrentState(deps) {
     drawShop,
     drawBattle,
     drawEquip,
-    renderWin,
     renderLose,
     renderEnding,
   } = deps;
@@ -90,11 +89,6 @@ export function drawCurrentState(deps) {
 
   if (currentState === GameState.EQUIP) {
     drawEquip();
-    return;
-  }
-
-  if (currentState === GameState.WIN) {
-    renderWin();
     return;
   }
 

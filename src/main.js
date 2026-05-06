@@ -211,6 +211,16 @@ import {
   moveShopCursor as moveShopCursorSystem,
   confirmShopChoice as confirmShopChoiceSystem,
   closeShop as closeShopSystem,
+  getShopAction as getShopActionSystem,
+  getShopOptions as getShopOptionsSystem,
+  buyPotion as buyPotionSystem,
+  buyEther as buyEtherSystem,
+  buyElixir as buyElixirSystem,
+  buySteelSword as buySteelSwordSystem,
+  buyIronArmor as buyIronArmorSystem,
+  buyLeatherArmor as buyLeatherArmorSystem,
+  buyMageStaff as buyMageStaffSystem,
+  buyGreenRobe as buyGreenRobeSystem,
 } from './systems/shopSystem.js';
 
 import {
@@ -257,6 +267,11 @@ import {
   getNpcRole as getNpcRoleSystem,
   getDialogueCompleteAction,
   shouldOpenUnreadSign,
+  openDialogue as openDialogueSystem,
+  openSignRead as openSignReadSystem,
+  advanceDialogue as advanceDialogueSystem,
+  handleNpcEvent as handleNpcEventSystem,
+handleDialogueComplete as handleDialogueCompleteSystem,
 } from './systems/dialogueSystem.js';
 
 import {
@@ -541,6 +556,11 @@ import {
 import {
   renderEquipMenu as renderEquipMenuUI,
 } from './ui/equipUI.js';
+
+import {
+  renderTalkWindow as renderTalkWindowUI,
+  drawTalk as drawTalkUI,
+} from './ui/dialogueUI.js';
 
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
@@ -902,6 +922,43 @@ function setHeroTile(x, y) {
   });
 }
 
+function getDialogueSystemDeps() {
+  return {
+    GameState,
+
+    activeSign,
+    readPage,
+    talkNpc,
+    talkPage,
+    flags,
+
+    NPC_EVENTS,
+
+    getNpcRole,
+    fullRecoverParty,
+    getNpcLines,
+    getSignReadLines,
+    isShopAvailable,
+
+    handleNpcEvent,
+    handleDialogueComplete,
+    getDialogueCompleteAction,
+    startLeafaRescueBattle,
+
+    advanceSignReadState,
+    advanceNpcTalkState,
+
+    setGameState,
+
+    setDialogueState: nextState => {
+      if ('talkNpc' in nextState) talkNpc = nextState.talkNpc;
+      if ('talkPage' in nextState) talkPage = nextState.talkPage;
+      if ('activeSign' in nextState) activeSign = nextState.activeSign;
+      if ('readPage' in nextState) readPage = nextState.readPage;
+    },
+  };
+}
+
 function getMapSystemDeps() {
   return {
     runtimeState,
@@ -1129,14 +1186,40 @@ function getShopSystemDeps() {
 
     shopCursor,
     talkNpc,
+    hero,
+    allies,
+
+    SHOP_ITEMS,
 
     getShopOptions,
+    getShopAction,
+
+    buyPotion,
+    buyEther,
+    buyElixir,
+    buyLeatherArmor,
+    buySteelSword,
+    buyIronArmor,
+    buyMageStaff,
+    buyGreenRobe,
+
+    buyConsumable: buyConsumableSystem,
+    buyHeroWeaponOnce: buyHeroWeaponOnceSystem,
+    buyHeroArmorOnce: buyHeroArmorOnceSystem,
+    buyAllyWeaponOnce: buyAllyWeaponOnceSystem,
+    buyAllyArmorOnce: buyAllyArmorOnceSystem,
+
     getNpcRole,
     handleDialogueComplete,
+
+    isShopAvailable,
+    changeItemCount,
+    getItemCount,
 
     setGameState,
     showShopBtns,
     hideBtns,
+    closeShop,
 
     setShopState: nextState => {
       if ('shopMsg' in nextState) shopMsg = nextState.shopMsg;
@@ -1151,6 +1234,41 @@ function getShopSystemDeps() {
     setSignState: nextState => {
       if ('activeSign' in nextState) activeSign = nextState.activeSign;
       if ('readPage' in nextState) readPage = nextState.readPage;
+    },
+  };
+}
+
+function getDialogueUIDeps() {
+  return {
+    VIEW_W,
+    VIEW_H,
+    talkNpc,
+    talkPage,
+    shopCursor,
+    shopMsg,
+    hero,
+    uiImgs,
+    txt,
+
+    drawDialogueBox,
+    drawPortraitBox,
+    drawNPC,
+    isShopAvailable,
+    getShopOptions,
+    drawShopList,
+    drawShopTextWindow,
+    getShopIntroLine,
+    getNpcLines,
+
+    renderMap,
+    activeSign,
+    renderSignReadWindow,
+
+    renderTalkWindow,
+
+    setShopState: nextState => {
+      if ('shopCursor' in nextState) shopCursor = nextState.shopCursor;
+      if ('shopMsg' in nextState) shopMsg = nextState.shopMsg;
     },
   };
 }
@@ -4197,15 +4315,11 @@ function updateMoveKeyUp(e) {
         updateEntities();
     }
 
-
-
   function updateTalk() {}
 
-  function drawTalk() {
-    renderMap();
-    if (activeSign) renderSignReadWindow();
-    else renderTalkWindow();
-  }
+function drawTalk() {
+  drawTalkUI(getDialogueUIDeps());
+}
 
   function updateShop() {}
 
@@ -4375,31 +4489,45 @@ function drawCurrentState() {
 
 
 function getShopAction(itemId) {
-  const actions = {
-    potion: buyPotion,
-    ether: buyEther,
-    elixir: buyElixir,
-    leatherArmor: buyLeatherArmor,
-    steelSword: buySteelSword,
-    ironArmor: buyIronArmor,
-    mage_staff: buyMageStaff,
-    green_robe: buyGreenRobe,
-    close: closeShop,
-  };
-
-  return actions[itemId] || closeShop;
+  return getShopActionSystem(itemId, getShopSystemDeps());
 }
 
 function getShopOptions() {
-  const shopType = talkNpc && talkNpc.npcId === 'shadow_shop_gray'
-    ? 'shadow'
-    : 'normal';
-
-  return SHOP_ITEMS[shopType].map(item => ({
-    ...item,
-    action: getShopAction(item.id),
-  }));
+  return getShopOptionsSystem(getShopSystemDeps());
 }
+
+function buyPotion() {
+  return buyPotionSystem(getShopSystemDeps());
+}
+
+function buyEther() {
+  return buyEtherSystem(getShopSystemDeps());
+}
+
+function buyElixir() {
+  return buyElixirSystem(getShopSystemDeps());
+}
+
+function buySteelSword() {
+  return buySteelSwordSystem(getShopSystemDeps());
+}
+
+function buyIronArmor() {
+  return buyIronArmorSystem(getShopSystemDeps());
+}
+
+function buyLeatherArmor() {
+  return buyLeatherArmorSystem(getShopSystemDeps());
+}
+
+function buyMageStaff() {
+  return buyMageStaffSystem(getShopSystemDeps());
+}
+
+function buyGreenRobe() {
+  return buyGreenRobeSystem(getShopSystemDeps());
+}
+
 
   function showShopBtns() {
     btnArea.classList.add('noPointer');
@@ -4407,150 +4535,14 @@ function getShopOptions() {
     btnArea.innerHTML = '';
   }
 
-function buyPotion() {
-  if (!isShopAvailable()) return;
-
-  const result = buyConsumableSystem({
-    hero,
-    price: 10,
-    itemId: 'potion',
-    itemName: 'ポーション',
-    amount: 1,
-    changeItemCount,
-    getItemCount,
-  });
-
-  shopMsg = result.message;
-}
-
-function buyEther() {
-  if (!isShopAvailable()) return;
-
-  const result = buyConsumableSystem({
-    hero,
-    price: 15,
-    itemId: 'ether',
-    itemName: 'エーテル',
-    amount: 1,
-    changeItemCount,
-    getItemCount,
-  });
-
-  shopMsg = result.message;
-}
-
-function buyElixir() {
-  if (!isShopAvailable()) return;
-
-  const result = buyConsumableSystem({
-    hero,
-    price: 100,
-    itemId: 'elixir',
-    itemName: 'エリクサー',
-    amount: 1,
-    changeItemCount,
-    getItemCount,
-  });
-
-  shopMsg = result.message;
-}
-
-
-function buySteelSword() {
-  if (!isShopAvailable()) return;
-
-  const result = buyHeroWeaponOnceSystem({
-    hero,
-    itemId: 'steelSword',
-    price: 130,
-    alreadyMessage: '鋼の剣は　もう持っている！',
-    successMessage: '鋼の剣を買った！',
-  });
-
-  shopMsg = result.message;
-}
-
-function buyIronArmor() {
-  if (!isShopAvailable()) return;
-
-  const result = buyHeroArmorOnceSystem({
-    hero,
-    itemId: 'ironArmor',
-    price: 200,
-    alreadyMessage: '鉄のよろいは　もう持っている！',
-    successMessage: '鉄のよろいを買った！',
-  });
-
-  shopMsg = result.message;
-}
-
-function buyLeatherArmor() {
-  if (!isShopAvailable()) return;
-
-  const result = buyHeroArmorOnceSystem({
-    hero,
-    itemId: 'leatherArmor',
-    price: 30,
-    alreadyMessage: '革よろいは　もう持っている！',
-    successMessage: '革よろいを買った！',
-  });
-
-  shopMsg = result.message;
-}
-
-function buyMageStaff() {
-  if (!isShopAvailable()) return;
-
-  const result = buyAllyWeaponOnceSystem({
-    hero,
-    allies,
-    allyId: 'leafa',
-    itemId: 'mage_staff',
-    price: 150,
-    noAllyMessage: 'リーファがいない！',
-    alreadyMessage: '魔法の杖は　もう持っている！',
-    successMessage: '魔法の杖を買った！',
-  });
-
-  shopMsg = result.message;
-}
-
-function buyGreenRobe() {
-  if (!isShopAvailable()) return;
-
-  const result = buyAllyArmorOnceSystem({
-    hero,
-    allies,
-    allyId: 'leafa',
-    itemId: 'green_robe',
-    price: 200,
-    noAllyMessage: 'リーファがいない！',
-    alreadyMessage: '草色のローブは　もう持っている！',
-    successMessage: '草色のローブを買った！',
-  });
-
-  shopMsg = result.message;
-}
-
-
   // ============================================================
   // 会話（トーク）システム
   // ============================================================
 
   // 会話を開始する
   function openDialogue(npc) {
-    const role = getNpcRole(npc);
-    if (role === 'inn') {
-      fullRecoverParty();
-    }
-    activeSign = null;
-    readPage = 0;
-    talkNpc  = npc;
-    talkNpc._lines = getNpcLines(npc); // イベント発火前にセリフを確定
-    handleNpcEvent(npc);               // アイテム付与などはセリフ表示後に発火
-    talkPage = 0;
-    setGameState(GameState.TALK);
-  }
+  openDialogueSystem(npc, getDialogueSystemDeps());
+}
 
   function openShop(npc) {
   openShopSystem(npc, getShopSystemDeps());
@@ -4570,59 +4562,16 @@ function closeShop() {
 
   // セリフを1ページ進める（最終ページなら会話終了）
   function advanceDialogue() {
-  if (activeSign) {
-    const readLines = getSignReadLines(activeSign);
-
-    const result = advanceSignReadState({
-      activeSign,
-      readPage,
-      readLines,
-    });
-
-    if (result.done) {
-      if (result.flagKey) flags[result.flagKey] = true;
-      activeSign = null;
-      readPage = 0;
-      setGameState(GameState.MAP);
-    } else {
-      readPage = result.nextReadPage;
-    }
-
-    return;
-  }
-
-  if (!talkNpc) return;
-
-  const lineCount = isShopAvailable()
-    ? 1
-    : (talkNpc._lines || getNpcLines(talkNpc)).length;
-
-  const result = advanceNpcTalkState({
-    talkPage,
-    lineCount,
-  });
-
-  if (result.done) {
-    handleDialogueComplete(talkNpc);
-    talkNpc = null;
-    talkPage = 0;
-    setGameState(GameState.MAP);
-  } else {
-    talkPage = result.nextTalkPage;
-  }
+  return advanceDialogueSystem(getDialogueSystemDeps());
 }
 
   function getSignReadLines(sign) {
   return getSignReadLinesSystem(sign);
 }
 
-  function openSignRead(sign) {
-      talkNpc = null;
-    talkPage = 0;
-    activeSign = sign;
-    readPage = 0;
-    setGameState(GameState.TALK);
-  }
+function openSignRead(sign) {
+  openSignReadSystem(sign, getDialogueSystemDeps());
+}
 
   function getShopIntroLine(npc) {
   return getShopIntroLineSystem(npc, getNpcLines);
@@ -4635,69 +4584,9 @@ function closeShop() {
     drawShopTextWindowUI(ctx, txt, wrapTextLines, text, selectedDetail, gold);
     }
 
-  // 会話ウィンドウをマップの上に重ねて描画する
   function renderTalkWindow() {
-    if (!talkNpc) return;
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
-
-    // 半透明の背景ボックス
-    drawDialogueBox(ctx);
-
-    // styleKey がある場合：立ち絵をダイアログボックス左上に表示
-    const styleImg = talkNpc.styleKey && uiImgs[talkNpc.styleKey];
-    const hasPortrait = styleImg && styleImg._ready;
-    if (hasPortrait) {
-      // ポートレートフレーム（ダイアログ上に重ねて表示）
-      drawPortraitBox(ctx);
-      ctx.drawImage(styleImg, 6, 152, 86, 96);
-    } else {
-      // 立ち絵がない場合は従来の小スプライト
-      drawNPC(16, 254, 1, talkNpc.bodyCol, talkNpc.hairCol, talkNpc.spriteKey, 32, 32);
-    }
-
-    // NPC 名前（立ち絵あり時は右にずらす）
-    const nameX = hasPortrait ? 100 : 60;
-    txt(talkNpc.name, nameX, 272, '#ffd700', 14);
-
-    if (isShopAvailable()) {
-      const options = getShopOptions();
-      if (shopCursor >= options.length) shopCursor = Math.max(0, options.length - 1);
-      ctx.fillStyle = '#4444aa';
-      ctx.fillRect(60, 276, 430, 1);
-      const selected = options[shopCursor] || options[0];
-      drawShopList(options);
-      const messageText = shopMsg || selected?.detail || getShopIntroLine(talkNpc);
-      drawShopTextWindow(messageText, selected?.detail || '', hero.gold);
-      ctx.restore();
-      return;
-    }
-
-    const talkLines = isShopAvailable()
-      ? [shopMsg || getShopIntroLine(talkNpc)]
-      : (talkNpc._lines || getNpcLines(talkNpc));
-
-    // テキスト開始X（立ち絵あり時は右にずらして重なりを避ける）
-    const textStartX = hasPortrait ? 100 : 60;
-    const textAreaW = hasPortrait ? 390 : 430;
-
-    // ページ番号
-    txt(`${talkPage + 1}/${talkLines.length}`, 466, 272, '#666688', 11);
-
-    // 区切り線
-    ctx.fillStyle = '#4444aa';
-    ctx.fillRect(textStartX, 276, textAreaW, 1);
-
-    // セリフ（現在ページ）
-    txt(talkLines[talkPage], textStartX, 306, '#ffffff', 14);
-
-    // ページ送りプロンプト（点滅）
-    if (Math.floor(Date.now() / 450) % 2) {
-      const isLast = talkPage >= talkLines.length - 1;
-      txt(isLast ? '[ とじる ]' : '[ つぎへ  ]', 376, 368, '#88aaff', 12);
-    }
-    ctx.restore();
-  }
+  renderTalkWindowUI(ctx, getDialogueUIDeps());
+}
 
   function renderSignReadWindow() {
     if (!activeSign) return;
@@ -5991,24 +5880,12 @@ const NPC_EVENTS = createNpcEvents({
   showNotice,
 });
 
-  // NPC との会話開始時に呼ばれる個別イベントフック
-  function handleNpcEvent(npc) {
-    if (npc.npcId && NPC_EVENTS[npc.npcId]) {
-      NPC_EVENTS[npc.npcId]();
-    }
-  }
+function handleNpcEvent(npc) {
+  handleNpcEventSystem(npc, getDialogueSystemDeps());
+}
 
-  function handleDialogueComplete(npc) {
-  const action = getDialogueCompleteAction(npc);
-
-  if (action.type === 'setFlag') {
-    flags[action.flagKey] = action.value;
-    return;
-  }
-
-  if (action.type === 'startLeafaRescueBattle') {
-    setTimeout(startLeafaRescueBattle, action.delay);
-  }
+function handleDialogueComplete(npc) {
+  handleDialogueCompleteSystem(npc, getDialogueSystemDeps());
 }
 
   // ============================================================

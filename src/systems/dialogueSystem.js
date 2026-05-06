@@ -98,3 +98,162 @@ export function getDialogueCompleteAction(npc) {
 export function shouldOpenUnreadSign(sign, flags) {
   return !!(sign && sign.flagKey && !flags[sign.flagKey]);
 }
+
+export function openDialogue(npc, deps) {
+  const {
+    GameState,
+    getNpcRole,
+    fullRecoverParty,
+    getNpcLines,
+    handleNpcEvent,
+    setDialogueState,
+    setGameState,
+  } = deps;
+
+  const role = getNpcRole(npc);
+
+  if (role === 'inn') {
+    fullRecoverParty();
+  }
+
+  const nextNpc = {
+    ...npc,
+    _lines: getNpcLines(npc),
+  };
+
+  setDialogueState({
+    activeSign: null,
+    readPage: 0,
+    talkNpc: nextNpc,
+    talkPage: 0,
+  });
+
+  handleNpcEvent(npc);
+
+  setGameState(GameState.TALK);
+}
+
+export function openSignRead(sign, deps) {
+  const {
+    GameState,
+    setDialogueState,
+    setGameState,
+  } = deps;
+
+  setDialogueState({
+    talkNpc: null,
+    talkPage: 0,
+    activeSign: sign,
+    readPage: 0,
+  });
+
+  setGameState(GameState.TALK);
+}
+
+export function advanceDialogue(deps) {
+  const {
+    GameState,
+
+    activeSign,
+    readPage,
+    talkNpc,
+    talkPage,
+    flags,
+
+    getSignReadLines,
+    getNpcLines,
+    isShopAvailable,
+    advanceSignReadState,
+    advanceNpcTalkState,
+    handleDialogueComplete,
+
+    setDialogueState,
+    setGameState,
+  } = deps;
+
+  if (activeSign) {
+    const readLines = getSignReadLines(activeSign);
+
+    const result = advanceSignReadState({
+      activeSign,
+      readPage,
+      readLines,
+    });
+
+    if (result.done) {
+      if (result.flagKey) {
+        flags[result.flagKey] = true;
+      }
+
+      setDialogueState({
+        activeSign: null,
+        readPage: 0,
+      });
+
+      setGameState(GameState.MAP);
+    } else {
+      setDialogueState({
+        readPage: result.nextReadPage,
+      });
+    }
+
+    return true;
+  }
+
+  if (!talkNpc) return false;
+
+  const lineCount = isShopAvailable()
+    ? 1
+    : (talkNpc._lines || getNpcLines(talkNpc)).length;
+
+  const result = advanceNpcTalkState({
+    talkPage,
+    lineCount,
+  });
+
+  if (result.done) {
+    handleDialogueComplete(talkNpc);
+
+    setDialogueState({
+      talkNpc: null,
+      talkPage: 0,
+    });
+
+    setGameState(GameState.MAP);
+  } else {
+    setDialogueState({
+      talkPage: result.nextTalkPage,
+    });
+  }
+
+  return true;
+}
+
+export function handleNpcEvent(npc, deps) {
+  const {
+    NPC_EVENTS,
+  } = deps;
+
+  if (npc.npcId && NPC_EVENTS[npc.npcId]) {
+    NPC_EVENTS[npc.npcId]();
+  }
+}
+
+export function handleDialogueComplete(npc, deps) {
+  const {
+    flags,
+    getDialogueCompleteAction,
+    startLeafaRescueBattle,
+  } = deps;
+
+  const action = getDialogueCompleteAction(npc);
+
+  if (action.type === 'setFlag') {
+    flags[action.flagKey] = action.value;
+    return;
+  }
+
+  if (action.type === 'startLeafaRescueBattle') {
+    setTimeout(startLeafaRescueBattle, action.delay);
+  }
+}
