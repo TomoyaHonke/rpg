@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ドット絵RPG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+    }
+    h1 {
+      color: #ffd700;
+      font-size: 22px;
+      margin-bottom: 8px;
+      letter-spacing: 4px;
+    }
+    #gamePanel {
+      border: 3px solid #444466;
+      display: flex;
+      flex-direction: column;
+    }
+    #statusBar {
+      background: #12122a;
+      border-bottom: 1px solid #333355;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+    }
+    #statusName  { color: #ffd700; font-size: 13px; white-space: nowrap; }
+    .statGroup   { display: flex; align-items: center; gap: 6px; }
+    .statLabel   { font-size: 12px; width: 20px; }
+    .statLabel.hp { color: #ff6666; }
+    .statLabel.mp { color: #6699ff; }
+    .barBg       { background: #111; width: 110px; height: 10px; border: 1px solid #555; }
+    .barFill     { height: 100%; background: #dd3333; }
+    .barFill.mp  { background: #3366cc; }
+    #hpText, #mpText { font-size: 11px; color: #ccc; min-width: 44px; }
+    #locationLabel { color: #ffd700; font-size: 12px; margin-left: auto; white-space: nowrap; }
+    canvas { display: block; }
+    #btnArea {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      min-height: 44px;
+    }
+    .btn {
+      background: #1a1a3a;
+      color: #ffffff;
+      border: 2px solid #5555aa;
+      padding: 8px 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .btn:hover { background: #2a2a5a; }
+    #notification {
+      min-height: 24px;
+      margin-top: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      color: #aaffaa;
+      text-align: center;
+      letter-spacing: 1px;
+      text-shadow: 0 0 10px #44ff88;
+    }
+    #hint { margin-top: 4px; color: #666688; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>⚔ ドット絵 RPG ⚔</h1>
+  <div id="gamePanel">
+    <div id="statusBar">
+      <span id="statusName">Lv.1  ゆうしゃ</span>
+      <div class="statGroup">
+        <span class="statLabel hp">HP</span>
+        <div class="barBg"><div id="hpBarFill" class="barFill"></div></div>
+        <span id="hpText">30/30</span>
+      </div>
+      <div class="statGroup">
+        <span class="statLabel mp">MP</span>
+        <div class="barBg"><div id="mpBarFill" class="barFill mp"></div></div>
+        <span id="mpText">12/12</span>
+      </div>
+      <span id="locationLabel"></span>
+    </div>
+    <canvas id="c" width="512" height="384"></canvas>
+  </div>
+  <div id="btnArea"></div>
+  <div id="hint">移動：← → ↑ ↓ / W A S D　　話しかける：Space・Enter・Z　　草むらでエンカウント</div>
+
+  <script>
+  // ============================================================
+  // 定数・設定
+  // ============================================================
+  const TILE     = 32;    // 1タイルのピクセル数
+  const COLS     = 16;    // マップ横タイル数
+  const ROWS     = 12;    // マップ縦タイル数
+  const ENC_RATE = 0.15;  // エンカウント確率（0〜1）
+
+  // タイルの種類
+  const T = { GRASS: 0, TREE: 1, WATER: 2, FLOWER: 3, STONE: 4, HOUSE: 5 };
+
+  // ゲーム状態
+  const S = { MAP: 'map', TALK: 'talk', BATTLE: 'battle', WIN: 'win', LOSE: 'lose' };
+
+  // ============================================================
+  // マップデータ（2次元配列）
+  //   0 = 草　（歩ける・エンカウントあり）
+  //   1 = 木　（歩けない）
+  //   2 = 水　（歩けない）
+  //   3 = 花　（歩ける・エンカウントあり）
+  //   4 = 石畳（歩ける・エンカウントなし）← 街エリア
+  //   5 = 建物（歩けない）← 街の建物
+  //
+  // 街「ヒカリのまち」は右上（col 10-14, row 1-5）
+  // col 9 の草から col 10 の石畳へ進むと街に入れる（row 2 と row 4 が入口）
+  // ============================================================
+  const MAP = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,5,4,4,4,5,1],  // row 1：街の上壁
+    [1,0,3,1,1,0,0,0,0,0,4,4,4,4,4,1],  // row 2：北入口（col9→col10）
+    [1,0,0,1,1,0,0,0,0,0,5,4,4,4,5,1],  // row 3：建物の列
+    [1,0,0,0,0,0,0,3,0,0,4,4,4,4,4,1],  // row 4：南入口（col9→col10）
+    [1,0,0,0,0,1,1,0,0,0,5,4,4,4,5,1],  // row 5：街の下壁
+    [1,0,3,0,0,1,1,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,2,2,2,0,0,0,0,0,0,1],
+    [1,0,0,1,0,0,2,2,2,0,0,0,1,0,0,1],
+    [1,0,0,0,0,3,0,0,0,0,0,0,0,3,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ];
+
+  // ============================================================
+  // プレイヤーのデータ
+  // ============================================================
+  const hero = {
+    x: 1, y: 1,          // マップ上の位置（タイル単位）
+    hp: 30, maxHp: 30,   // ヒットポイント
+    mp: 12, maxMp: 12,   // マジックポイント
+    atk: 8,  def: 3,     // 攻撃力・防御力
+    level: 1, exp: 0,    // レベル・経験値
+  };
+
+  // ============================================================
+  // 敵データのひな形（バトルのたびにコピーして使う）
+  // ============================================================
+  const SLIME_BASE = {
+    name: 'スライム',
+    hp: 15, maxHp: 15,
+    atk: 5, def: 1,
+    exp: 10,
+  };
+
+  // ============================================================
+  // NPC データ（位置・見た目・セリフ）
+  //   x, y     = マップ上のタイル座標
+  //   bodyCol  = 体の色
+  //   hairCol  = 髪の色
+  //   lines    = セリフの配列（1要素 = 1ページ）
+  // ============================================================
+  const NPCS = [
+    {
+      x: 12, y: 1,
+      name: '長老',
+      bodyCol: '#778877', hairCol: '#cccccc',
+      lines: [
+        'おお、旅人よ。よくぞ　ヒカリのまちへ。',
+        'このあたりの　草むらには',
+        'スライムが　出るから　気をつけるのじゃ！',
+      ],
+    },
+    {
+      x: 12, y: 3,
+      name: '商人　マリオ',
+      bodyCol: '#cc3311', hairCol: '#221100',
+      lines: [
+        'いらっしゃい！　旅人さん。',
+        'いまは　品物がないのだけど…',
+        'また　来てくださいね！',
+      ],
+    },
+    {
+      x: 12, y: 5,
+      name: 'こども',
+      bodyCol: '#ddbb22', hairCol: '#994400',
+      lines: [
+        'ねえねえ！　スライムって　かわいいよね？',
+        'でも　たたかったら　こわかった…',
+        'ゆうしゃさんって　つよいね！',
+      ],
+    },
+  ];
+
+  // ============================================================
+  // ゲーム変数
+  // ============================================================
+  let state    = S.MAP;  // 現在のゲーム状態
+  let foe      = null;   // 戦闘中の敵オブジェクト
+  let msg      = '';     // バトルメッセージ
+  let heroTurn = true;   // プレイヤーのターンかどうか
+  let winMsg   = '';     // 勝利時のメッセージ
+  let moving   = false;  // 移動クールダウン中かどうか
+  let talkNpc  = null;   // 会話中のNPC（nullなら会話していない）
+  let talkPage = 0;      // 現在表示しているセリフのページ番号
+
+  // ============================================================
+  // Canvas の取得
+  // ============================================================
+  const canvas  = document.getElementById('c');
+  const ctx     = canvas.getContext('2d');
+  const btnArea = document.getElementById('btnArea');
+
+  // ============================================================
+  // ユーティリティ
+  // ============================================================
+  // min〜max のランダム整数を返す
+  function rng(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // シャドウ付きテキストを描画する
+  function txt(s, x, y, col = '#fff', sz = 14) {
+    ctx.font = `${sz}px "Courier New", monospace`;
+    ctx.fillStyle = '#000';
+    ctx.fillText(s, x + 1, y + 1); // 影
+    ctx.fillStyle = col;
+    ctx.fillText(s, x, y);
+  }
+
+  // HPバー（横長のゲージ）を描画する
+  function drawBar(x, y, w, cur, max, col) {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x, y, w, 10);
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, Math.round(w * cur / max), 10);
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, 10);
+  }
+
+  // ============================================================
+  // スプライト描画：主人公
+  //   px, py = 描画するピクセル座標（左上）
+  //   sc     = 拡大率（1=普通, 2=2倍, ...）
+  // ============================================================
+  function drawHero(px, py, sc = 1) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // 剣
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(26, 12, 3, 14);
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(24, 20, 7, 3);
+
+    // 足
+    ctx.fillStyle = '#555';
+    ctx.fillRect(10, 25, 5, 6);
+    ctx.fillRect(17, 25, 5, 6);
+
+    // 体（青いよろい）
+    ctx.fillStyle = '#3355ff';
+    ctx.fillRect(9, 14, 14, 12);
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(9, 22, 14, 2); // ベルト
+
+    // 腕（肌色）
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(5, 15, 5, 8);
+    ctx.fillRect(22, 15, 5, 8);
+
+    // 首・頭（肌色）
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(13, 11, 6, 4);
+    ctx.fillRect(9, 5, 14, 10);
+
+    // 髪（茶色）
+    ctx.fillStyle = '#4a2200';
+    ctx.fillRect(9, 5, 14, 4);
+    ctx.fillRect(9, 5, 3, 8);
+    ctx.fillRect(20, 5, 3, 8);
+
+    // 目
+    ctx.fillStyle = '#000';
+    ctx.fillRect(12, 11, 2, 2);
+    ctx.fillRect(18, 11, 2, 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(12, 11, 1, 1);
+    ctx.fillRect(18, 11, 1, 1);
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  // スプライト描画：スライム
+  // ============================================================
+  function drawSlime(px, py, sc = 1) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // 影
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(6, 26, 20, 4);
+
+    // 体（明るい緑）
+    ctx.fillStyle = '#44cc44';
+    ctx.fillRect(4, 14, 24, 12);
+    ctx.fillRect(8, 10, 16, 16);
+    ctx.fillRect(6, 12, 20, 14);
+
+    // ハイライト（光沢）
+    ctx.fillStyle = '#77ee77';
+    ctx.fillRect(10, 12, 6, 4);
+
+    // 暗い部分（底）
+    ctx.fillStyle = '#228822';
+    ctx.fillRect(4, 22, 24, 4);
+
+    // 目
+    ctx.fillStyle = '#000';
+    ctx.fillRect(10, 17, 4, 4);
+    ctx.fillRect(18, 17, 4, 4);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(10, 17, 2, 2);
+    ctx.fillRect(18, 17, 2, 2);
+
+    // 口
+    ctx.fillStyle = '#004400';
+    ctx.fillRect(12, 22, 8, 2);
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  // スプライト描画：NPC
+  //   bodyCol = 体の色、hairCol = 髪の色（NPCごとに異なる）
+  // ============================================================
+  function drawNPC(px, py, sc, bodyCol, hairCol) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // 足
+    ctx.fillStyle = '#444';
+    ctx.fillRect(10, 25, 5, 6);
+    ctx.fillRect(17, 25, 5, 6);
+
+    // 体（bodyColで色を変える）
+    ctx.fillStyle = bodyCol;
+    ctx.fillRect(9, 14, 14, 12);
+
+    // 腕（肌色）
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(5, 15, 5, 8);
+    ctx.fillRect(22, 15, 5, 8);
+
+    // 首・頭（肌色）
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(13, 11, 6, 4);
+    ctx.fillRect(9, 5, 14, 10);
+
+    // 髪（hairColで色を変える）
+    ctx.fillStyle = hairCol;
+    ctx.fillRect(9, 5, 14, 4);
+    ctx.fillRect(9, 5, 3, 8);
+    ctx.fillRect(20, 5, 3, 8);
+
+    // 目
+    ctx.fillStyle = '#000';
+    ctx.fillRect(12, 11, 2, 2);
+    ctx.fillRect(18, 11, 2, 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(12, 11, 1, 1);
+    ctx.fillRect(18, 11, 1, 1);
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  // タイル1枚を描画する
+  // ============================================================
+  function drawTile(col, row) {
+    const x = col * TILE;
+    const y = row * TILE;
+    const t = MAP[row][col];
+
+    if (t === T.TREE) {
+      ctx.fillStyle = '#4a8c3f'; ctx.fillRect(x, y, TILE, TILE); // 下の草
+      ctx.fillStyle = '#5c4033'; ctx.fillRect(x + 13, y + 20, 6, 12); // 幹
+      ctx.fillStyle = '#2d5a1b'; ctx.fillRect(x + 7, y + 14, 18, 12); // 葉（下）
+      ctx.fillStyle = '#3a7222'; ctx.fillRect(x + 9, y + 8, 14, 10);  // 葉（中）
+      ctx.fillStyle = '#4a8c2a'; ctx.fillRect(x + 11, y + 4, 10, 8);  // 葉（上）
+
+    } else if (t === T.WATER) {
+      ctx.fillStyle = '#1a4488'; ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#2255aa';
+      ctx.fillRect(x + 2,  y + 8,  12, 3);
+      ctx.fillRect(x + 16, y + 20, 12, 3);
+      ctx.fillStyle = '#3377cc'; ctx.fillRect(x + 4, y + 16, 8, 2);
+
+    } else if (t === T.FLOWER) {
+      ctx.fillStyle = '#4a8c3f'; ctx.fillRect(x, y, TILE, TILE); // 草
+      ctx.fillStyle = '#5aa84e';
+      ctx.fillRect(x + 4, y + 6, 2, 2); ctx.fillRect(x + 20, y + 20, 2, 2);
+      ctx.fillStyle = '#3a6e30'; ctx.fillRect(x + 15, y + 18, 2, 8); // 茎
+      ctx.fillStyle = '#ff66aa'; // 花びら（4方向）
+      ctx.fillRect(x + 11, y + 12, 4, 4);
+      ctx.fillRect(x + 17, y + 12, 4, 4);
+      ctx.fillRect(x + 14, y + 9,  4, 4);
+      ctx.fillRect(x + 14, y + 15, 4, 4);
+      ctx.fillStyle = '#ffee00'; ctx.fillRect(x + 14, y + 12, 4, 4); // 中心
+
+    } else if (t === T.STONE) {
+      // 石畳（街の床）
+      ctx.fillStyle = '#8a8070'; ctx.fillRect(x, y, TILE, TILE);
+      // コブルストーンの目地
+      ctx.fillStyle = '#6a6058';
+      ctx.fillRect(x,      y,      TILE, 1); // 上端線
+      ctx.fillRect(x,      y,      1, TILE); // 左端線
+      ctx.fillRect(x + 16, y + 1,  1, 15);  // 中央縦（上半分）
+      ctx.fillRect(x + 1,  y + 16, 15, 1);  // 中央横（左側）
+      ctx.fillRect(x + 17, y + 16, 15, 1);  // 中央横（右側）
+      ctx.fillRect(x,      y + 16, 1,  16); // 左端線（下半分）
+      // 石のハイライト（少し明るい面）
+      ctx.fillStyle = '#9e9080';
+      ctx.fillRect(x + 2,  y + 2,  12, 12);
+      ctx.fillRect(x + 18, y + 18, 12, 12);
+
+    } else if (t === T.HOUSE) {
+      // 建物タイル（街の建物ファサード）
+      // 石畳ベース
+      ctx.fillStyle = '#8a8070'; ctx.fillRect(x, y, TILE, TILE);
+      // 屋根（赤茶）
+      ctx.fillStyle = '#992222';
+      ctx.fillRect(x,    y + 6,  32, 4);
+      ctx.fillRect(x + 3, y + 3, 26, 4);
+      ctx.fillRect(x + 7, y + 1, 18, 3);
+      // 壁（ベージュ）
+      ctx.fillStyle = '#c8a470'; ctx.fillRect(x + 1, y + 9, 30, 23);
+      // ドア
+      ctx.fillStyle = '#553311'; ctx.fillRect(x + 12, y + 20, 8, 12);
+      // 窓（左）
+      ctx.fillStyle = '#88ccff'; ctx.fillRect(x + 3, y + 12, 7, 6);
+      ctx.fillStyle = '#557799'; // 窓枠
+      ctx.fillRect(x + 3,  y + 15, 7, 1);
+      ctx.fillRect(x + 6,  y + 12, 1, 6);
+      // 窓（右）
+      ctx.fillStyle = '#88ccff'; ctx.fillRect(x + 22, y + 12, 7, 6);
+      ctx.fillStyle = '#557799';
+      ctx.fillRect(x + 22, y + 15, 7, 1);
+      ctx.fillRect(x + 25, y + 12, 1, 6);
+
+    } else {
+      // 草（GRASS）
+      ctx.fillStyle = '#4a8c3f'; ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#5aa84e'; // 草の模様（明るい点）
+      ctx.fillRect(x + 4,  y + 6,  2, 2);
+      ctx.fillRect(x + 12, y + 14, 2, 2);
+      ctx.fillRect(x + 20, y + 4,  2, 2);
+      ctx.fillRect(x + 26, y + 22, 2, 2);
+      ctx.fillRect(x + 8,  y + 26, 2, 2);
+    }
+  }
+
+  // ============================================================
+  // NPC ユーティリティ
+  // ============================================================
+  // 指定座標にいるNPCを返す（いなければ null）
+  function getNpcAt(x, y) {
+    return NPCS.find(n => n.x === x && n.y === y) || null;
+  }
+
+  // プレイヤーの隣（上下左右）にいるNPCを返す（いなければ null）
+  function getAdjacentNpc() {
+    for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+      const n = getNpcAt(hero.x + dx, hero.y + dy);
+      if (n) return n;
+    }
+    return null;
+  }
+
+  // ============================================================
+  // マップ画面を描画する
+  // ============================================================
+  function renderMap() {
+    // 全タイルを描画
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        drawTile(c, r);
+
+    // NPC を描画（プレイヤーより先に描くと、プレイヤーが最前面になる）
+    for (const npc of NPCS) {
+      drawNPC(npc.x * TILE, npc.y * TILE, 1, npc.bodyCol, npc.hairCol);
+      // 「！」バルーン（話しかけられることを示す）
+      const ex = npc.x * TILE + 12;
+      const ey = npc.y * TILE - 8;
+      ctx.fillStyle = '#ffffcc';
+      ctx.fillRect(ex - 2, ey - 2, 10, 11); // 吹き出し背景
+      ctx.fillStyle = '#884400';
+      ctx.fillRect(ex,     ey,     6, 4);   // ! の上部の棒
+      ctx.fillRect(ex,     ey + 5, 6, 2);   // ! の下部の棒
+      ctx.fillRect(ex,     ey + 8, 6, 2);   // ! の点
+    }
+
+    // 主人公を描画（タイル座標 → ピクセル座標に変換）
+    drawHero(hero.x * TILE, hero.y * TILE);
+
+  }
+
+  // ============================================================
+  // バトル画面を描画する
+  // ============================================================
+  function renderBattle() {
+    // 背景（夜空）
+    ctx.fillStyle = '#1a0d30';
+    ctx.fillRect(0, 0, 512, 240);
+
+    // 星
+    ctx.fillStyle = '#ffffff';
+    [[40,30],[100,15],[200,50],[300,20],[420,40],[480,10],[160,35],[360,25]].forEach(([sx, sy]) => {
+      ctx.fillRect(sx, sy, 2, 2);
+    });
+
+    // 地面
+    ctx.fillStyle = '#3a2040';
+    ctx.fillRect(0, 240, 512, 144);
+    ctx.fillStyle = '#2a1030';
+    ctx.fillRect(0, 240, 512, 4);
+
+    // 敵（左側・大きく表示）
+    if (foe && foe.hp > 0) {
+      drawSlime(80, 130, 3);
+      txt(foe.name, 82, 128, '#aaffaa', 16);
+      txt('HP', 82, 114, '#ff6666', 12);
+      drawBar(102, 104, 130, foe.hp, foe.maxHp, '#dd3333');
+      txt(`${foe.hp}/${foe.maxHp}`, 104, 114, '#fff', 11);
+    }
+
+    // 主人公（右側・大きく表示）
+    drawHero(340, 140, 2.5);
+
+    // メッセージウィンドウ
+    ctx.fillStyle = 'rgba(5,5,20,0.92)';
+    ctx.fillRect(8, 256, 496, 52);
+    ctx.strokeStyle = '#5555aa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 256, 496, 52);
+    txt(msg, 18, 282, '#ffffff', 14);
+
+    // プレイヤーステータス（左下）
+    ctx.fillStyle = 'rgba(5,5,20,0.92)';
+    ctx.fillRect(8, 314, 224, 64);
+    ctx.strokeStyle = '#5555aa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 314, 224, 64);
+    txt(`Lv.${hero.level}  ゆうしゃ`, 16, 330, '#ffd700', 13);
+    txt('HP', 16, 348, '#ff6666', 12);
+    drawBar(38, 337, 174, hero.hp, hero.maxHp, '#dd3333');
+    txt(`${hero.hp}/${hero.maxHp}`, 40, 348, '#fff', 11);
+    txt('MP', 16, 368, '#6699ff', 12);
+    drawBar(38, 357, 174, hero.mp, hero.maxMp, '#3366cc');
+    txt(`${hero.mp}/${hero.maxMp}`, 40, 368, '#fff', 11);
+  }
+
+  // ============================================================
+  // 勝利画面を描画する
+  // ============================================================
+  function renderWin() {
+    ctx.fillStyle = '#050520';
+    ctx.fillRect(0, 0, 512, 384);
+
+    // きらきらエフェクト（時間で動く星）
+    const t = Date.now() / 700;
+    ctx.fillStyle = '#ffd700';
+    for (let i = 0; i < 28; i++) {
+      const sx = ((Math.sin(i * 2.4 + t) * 0.5 + 0.5) * 512) | 0;
+      const sy = ((Math.cos(i * 1.9 + t * 0.7) * 0.5 + 0.5) * 384) | 0;
+      ctx.fillRect(sx, sy, 3, 3);
+    }
+
+    txt('★  Victory!  ★', 118, 130, '#ffd700', 36);
+    txt('てきを  たおした！', 148, 190, '#ffffff', 20);
+    txt(winMsg, 162, 228, '#aaffaa', 16);
+    txt('なにかキーを押してマップへ', 130, 292, '#8888ff', 15);
+
+    drawHero(120, 300, 2);
+    if (foe) drawSlime(340, 300, 2);
+  }
+
+  // ============================================================
+  // ゲームオーバー画面を描画する
+  // ============================================================
+  function renderLose() {
+    ctx.fillStyle = '#150000';
+    ctx.fillRect(0, 0, 512, 384);
+    txt('GAME  OVER', 128, 182, '#ff2222', 42);
+    txt('ちからつきた…', 172, 248, '#cccccc', 20);
+    txt('なにかキーを押してやりなおす', 112, 314, '#888888', 15);
+  }
+
+  // ============================================================
+  // メインループ（毎フレーム呼ばれる）
+  // ============================================================
+  // ============================================================
+  // HTML ステータスバーを更新する
+  // ============================================================
+  function updateStatusBar() {
+    document.getElementById('statusName').textContent = `Lv.${hero.level}  ゆうしゃ`;
+
+    // HP バー
+    const hpRatio = hero.hp / hero.maxHp;
+    const hpFill  = document.getElementById('hpBarFill');
+    hpFill.style.width      = `${Math.round(hpRatio * 100)}%`;
+    hpFill.style.background = hpRatio > 0.5 ? '#44dd44' : hpRatio > 0.25 ? '#dddd44' : '#dd3333';
+    document.getElementById('hpText').textContent = `${hero.hp}/${hero.maxHp}`;
+
+    // MP バー
+    const mpFill = document.getElementById('mpBarFill');
+    mpFill.style.width = `${Math.round(hero.mp / hero.maxMp * 100)}%`;
+    document.getElementById('mpText').textContent = `${hero.mp}/${hero.maxMp}`;
+
+    // 現在地（街にいるときだけ表示）
+    const curTile = MAP[hero.y] && MAP[hero.y][hero.x];
+    const inTown  = curTile === T.STONE || curTile === T.HOUSE;
+    document.getElementById('locationLabel').textContent = inTown ? '★ ヒカリのまち' : '';
+  }
+
+  function loop() {
+    ctx.clearRect(0, 0, 512, 384);
+    updateStatusBar();
+    // TALK 状態はマップを下地として描いたうえで会話ウィンドウを重ねる
+    if (state === S.MAP  || state === S.TALK) renderMap();
+    if (state === S.TALK)   renderTalkWindow();
+    if (state === S.BATTLE) renderBattle();
+    if (state === S.WIN)    renderWin();
+    if (state === S.LOSE)   renderLose();
+    requestAnimationFrame(loop); // 次のフレームへ
+  }
+
+  // ============================================================
+  // バトルボタンの表示・非表示
+  // ============================================================
+  function showBtns() {
+    btnArea.innerHTML = `
+      <button class="btn" onclick="doAtk()">⚔ こうげき</button>
+      <button class="btn" onclick="doMagic()">✨ ファイア (MP2)</button>
+      <button class="btn" onclick="doRun()">💨 にげる</button>
+    `;
+  }
+  function hideBtns() {
+    btnArea.innerHTML = '';
+  }
+
+  // ============================================================
+  // 会話（トーク）システム
+  // ============================================================
+
+  // 会話を開始する
+  function openDialogue(npc) {
+    talkNpc  = npc;
+    talkPage = 0;
+    state    = S.TALK;
+    hideBtns();
+  }
+
+  // セリフを1ページ進める（最終ページなら会話終了）
+  function advanceDialogue() {
+    if (!talkNpc) return;
+    talkPage++;
+    if (talkPage >= talkNpc.lines.length) {
+      talkNpc  = null;
+      talkPage = 0;
+      state    = S.MAP;
+    }
+  }
+
+  // 会話ウィンドウをマップの上に重ねて描画する
+  function renderTalkWindow() {
+    if (!talkNpc) return;
+
+    // 半透明の背景ボックス
+    ctx.fillStyle = 'rgba(4,4,28,0.95)';
+    ctx.fillRect(8, 246, 496, 130);
+    ctx.strokeStyle = '#8888cc';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 246, 496, 130);
+
+    // NPC スプライト（小さく左端に表示）
+    drawNPC(16, 254, 1, talkNpc.bodyCol, talkNpc.hairCol);
+
+    // NPC 名前
+    txt(talkNpc.name, 60, 272, '#ffd700', 14);
+
+    // ページ番号
+    txt(`${talkPage + 1}/${talkNpc.lines.length}`, 466, 272, '#666688', 11);
+
+    // 区切り線
+    ctx.fillStyle = '#4444aa';
+    ctx.fillRect(60, 276, 430, 1);
+
+    // セリフ（現在ページ）
+    txt(talkNpc.lines[talkPage], 60, 306, '#ffffff', 14);
+
+    // ページ送りプロンプト（点滅）
+    if (Math.floor(Date.now() / 450) % 2) {
+      const isLast = talkPage >= talkNpc.lines.length - 1;
+      txt(isLast ? '[ とじる ]' : '[ つぎへ  ]', 376, 368, '#88aaff', 12);
+    }
+  }
+
+  // ============================================================
+  // バトル開始
+  // ============================================================
+  function startBattle() {
+    foe      = { ...SLIME_BASE }; // テンプレートをコピーして敵を生成
+    state    = S.BATTLE;
+    heroTurn = true;
+    msg      = `${foe.name} が　あらわれた！`;
+    hideBtns();
+    setTimeout(showBtns, 700); // 少し間を置いてからボタン表示
+  }
+
+  // ============================================================
+  // プレイヤーの行動：こうげき
+  // ============================================================
+  function doAtk() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    hideBtns();
+    const dmg = Math.max(1, hero.atk - foe.def + rng(-1, 3));
+    foe.hp    = Math.max(0, foe.hp - dmg);
+    msg       = `ゆうしゃの　こうげき！　${dmg} のダメージ！`;
+    afterHeroAction();
+  }
+
+  // ============================================================
+  // プレイヤーの行動：ファイア（まほう）
+  // ============================================================
+  function doMagic() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    if (hero.mp < 2) {
+      msg = 'MPが　たりない！';
+      return;
+    }
+    hideBtns();
+    hero.mp -= 2;
+    const dmg = Math.max(1, hero.atk * 2 - foe.def + rng(0, 5));
+    foe.hp    = Math.max(0, foe.hp - dmg);
+    msg       = `ファイア！　${dmg} のダメージ！`;
+    afterHeroAction();
+  }
+
+  // ============================================================
+  // プレイヤーの行動：にげる
+  // ============================================================
+  function doRun() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    hideBtns();
+    if (Math.random() < 0.6) {
+      msg = 'うまく　にげきった！';
+      setTimeout(() => { state = S.MAP; }, 1000);
+    } else {
+      msg      = 'にげられなかった！';
+      heroTurn = false;
+      setTimeout(enemyTurn, 1300);
+    }
+  }
+
+  // ============================================================
+  // プレイヤー行動後の処理（敵が生きているか確認）
+  // ============================================================
+  function afterHeroAction() {
+    if (foe.hp <= 0) {
+      // 勝利！
+      setTimeout(() => {
+        hero.exp += foe.exp;
+        winMsg   = `${foe.exp} けいけんちを　えた！`;
+        state    = S.WIN;
+      }, 900);
+    } else {
+      // 敵のターンへ
+      heroTurn = false;
+      setTimeout(enemyTurn, 1300);
+    }
+  }
+
+  // ============================================================
+  // 敵のターン（自動で攻撃してくる）
+  // ============================================================
+  function enemyTurn() {
+    if (state !== S.BATTLE) return;
+    const dmg = Math.max(1, foe.atk - hero.def + rng(-1, 3));
+    hero.hp   = Math.max(0, hero.hp - dmg);
+    msg       = `${foe.name}の　こうげき！　${dmg} のダメージ！`;
+    if (hero.hp <= 0) {
+      // ゲームオーバー
+      setTimeout(() => { state = S.LOSE; }, 1000);
+    } else {
+      // プレイヤーのターンへ戻る
+      heroTurn = true;
+      setTimeout(() => {
+        msg = 'どうする？';
+        showBtns();
+      }, 1300);
+    }
+  }
+
+  // ============================================================
+  // プレイヤーの移動
+  // ============================================================
+  function move(dx, dy) {
+    if (moving || state !== S.MAP) return; // クールダウン中・マップ以外は動かない
+
+    const nx = hero.x + dx;
+    const ny = hero.y + dy;
+
+    // マップの端を超えないようにする
+    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
+
+    // 移動先にNPCがいれば、移動せずに話しかける
+    const npc = getNpcAt(nx, ny);
+    if (npc) {
+      openDialogue(npc);
+      return;
+    }
+
+    // 木・水・建物は通れない
+    const tile = MAP[ny][nx];
+    if (tile === T.TREE || tile === T.WATER || tile === T.HOUSE) return;
+
+    hero.x = nx;
+    hero.y = ny;
+
+    // ランダムエンカウント判定（草・花タイルのみ。石畳の街ではエンカウントなし）
+    if ((tile === T.GRASS || tile === T.FLOWER) && Math.random() < ENC_RATE) {
+      setTimeout(startBattle, 80);
+    }
+
+    // 移動クールダウン（連打防止）
+    moving = true;
+    setTimeout(() => { moving = false; }, 160);
+  }
+
+  // ============================================================
+  // キーボード入力
+  // ============================================================
+  document.addEventListener('keydown', e => {
+    if (state === S.MAP) {
+      if (e.key === 'ArrowUp'    || e.key === 'w') move(0, -1);
+      if (e.key === 'ArrowDown'  || e.key === 's') move(0,  1);
+      if (e.key === 'ArrowLeft'  || e.key === 'a') move(-1, 0);
+      if (e.key === 'ArrowRight' || e.key === 'd') move( 1, 0);
+      // Space・Enter・Z で隣接NPCに話しかける
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        const adj = getAdjacentNpc();
+        if (adj) openDialogue(adj);
+      }
+    } else if (state === S.TALK) {
+      // Space・Enter・Z・Escape でセリフを進める／会話を閉じる
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z'
+          || e.key === 'Escape') {
+        e.preventDefault();
+        advanceDialogue();
+      }
+    } else if (state === S.WIN) {
+      backToMap();
+    } else if (state === S.LOSE) {
+      resetGame();
+    }
+  });
+
+  // キャンバスをクリックしても勝利・ゲームオーバー画面を進められる
+  canvas.addEventListener('click', () => {
+    if (state === S.TALK) advanceDialogue();
+    if (state === S.WIN)  backToMap();
+    if (state === S.LOSE) resetGame();
+  });
+
+  // マップへ戻る
+  function backToMap() {
+    state = S.MAP;
+    foe   = null;
+    hideBtns();
+  }
+
+  // ゲームをリセット（最初から）
+  function resetGame() {
+    hero.hp = hero.maxHp;
+    hero.mp = hero.maxMp;
+    hero.x  = 1;
+    hero.y  = 1;
+    state   = S.MAP;
+    foe     = null;
+    hideBtns();
+  }
+
+  // ============================================================
+  // ゲーム開始！
+  // ============================================================
+  loop();
+  </script>
+</body>
+</html>

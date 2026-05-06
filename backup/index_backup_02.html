@@ -1,0 +1,2749 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ドット絵RPG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+    }
+    h1 {
+      color: #ffd700;
+      font-size: 22px;
+      margin-bottom: 8px;
+      letter-spacing: 4px;
+    }
+    #gamePanel {
+      border: 3px solid #444466;
+      display: flex;
+      flex-direction: column;
+    }
+    #statusBar {
+      background: #12122a;
+      border-bottom: 1px solid #333355;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+    }
+    #statusName  { color: #ffd700; font-size: 13px; white-space: nowrap; }
+    .statGroup   { display: flex; align-items: center; gap: 6px; }
+    .statLabel   { font-size: 12px; width: 20px; }
+    .statLabel.hp { color: #ff6666; }
+    .statLabel.mp { color: #6699ff; }
+    .barBg       { background: #111; width: 110px; height: 10px; border: 1px solid #555; }
+    .barFill     { height: 100%; background: #dd3333; }
+    .barFill.mp  { background: #3366cc; }
+    #hpText, #mpText { font-size: 11px; color: #ccc; min-width: 44px; }
+    #locationLabel { color: #ffd700; font-size: 12px; margin-left: auto; white-space: nowrap; }
+    canvas { display: block; }
+    #btnArea {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      min-height: 44px;
+    }
+    .btn {
+      background: #1a1a3a;
+      color: #ffffff;
+      border: 2px solid #5555aa;
+      padding: 8px 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .btn:hover { background: #2a2a5a; }
+    #notification {
+      min-height: 24px;
+      margin-top: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      color: #aaffaa;
+      text-align: center;
+      letter-spacing: 1px;
+      text-shadow: 0 0 10px #44ff88;
+    }
+    #hint { margin-top: 4px; color: #666688; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>⚔ ドット絵 RPG ⚔</h1>
+  <div id="gamePanel">
+    <div id="statusBar">
+      <span id="statusName">Lv.1  ゆうしゃ  EXP 0  G 0</span>
+      <div class="statGroup">
+        <span class="statLabel hp">HP</span>
+        <div class="barBg"><div id="hpBarFill" class="barFill"></div></div>
+        <span id="hpText">30/30</span>
+      </div>
+      <div class="statGroup">
+        <span class="statLabel mp">MP</span>
+        <div class="barBg"><div id="mpBarFill" class="barFill mp"></div></div>
+        <span id="mpText">12/12</span>
+      </div>
+      <span id="locationLabel"></span>
+    </div>
+    <canvas id="c" width="1024" height="768"></canvas>
+  </div>
+  <div id="btnArea"></div>
+  <div id="notification"></div>
+  <div id="hint">移動：← → ↑ ↓ / W A S D　　話しかける：Space・Enter・Z　　Shift+S:セーブ / Shift+L:ロード　　草むらでエンカウント</div>
+
+  <script>
+  // ============================================================
+  // 定数・設定
+  // ============================================================
+  const TILE        = 32;               // 論理タイルサイズ（移動・当たり判定・イベント判定）
+  const TILE_RENDER = 128;              // 描画タイルサイズ（見た目のみ）
+  const SCALE       = TILE_RENDER / TILE; // 描画倍率 (= 4)
+  const VIEW_W      = TILE_RENDER * 8;  // キャンバス幅 (= 1024)
+  const VIEW_H      = TILE_RENDER * 6;  // キャンバス高さ (= 768)
+  const VIEW_COLS   = VIEW_W / TILE_RENDER; // 横に見えるタイル数 (= 8)
+  const VIEW_ROWS   = VIEW_H / TILE_RENDER; // 縦に見えるタイル数 (= 6)
+  const COLS        = 16;              // マップ横タイル数
+  const ROWS        = 12;              // マップ縦タイル数
+  const ENC_RATE    = 0.15;            // エンカウント確率（0〜1）
+  const SAVE_KEY    = 'dotRpgSave';
+
+  // ── キャラクター表示サイズ（128px タイルに対する拡大率と中央下寄せオフセット）──
+  const HERO_SC   = 2.5;  // 主人公: 80×80px  (タイルの 62%)
+  const NPC_SC    = 2.0;  // NPC:    64×64px  (タイルの 50%)
+  const BOSS_SC   = 3.5;  // ボス:  112×112px (タイルの 87%)
+  // offX: タイル左端から中央揃え、offY: 足元(論理y=31)がタイル下端4px手前
+  const HERO_OFF  = { x: Math.round((TILE_RENDER - HERO_SC * 32) / 2), y: Math.round(TILE_RENDER - HERO_SC * 32 - 4) };
+  const NPC_OFF   = { x: Math.round((TILE_RENDER - NPC_SC  * 32) / 2), y: Math.round(TILE_RENDER - NPC_SC  * 32 - 4) };
+  const BOSS_OFF  = { x: Math.round((TILE_RENDER - BOSS_SC * 32) / 2), y: Math.round(TILE_RENDER - BOSS_SC * 32    ) };
+  // 移動アニメーション: 1タイル移動に要するフレーム数（≈133ms @60fps）
+  const MOVE_FRAMES = 16;
+
+  // ============================================================
+  // タイル画像パス設定
+  //   tiles/ フォルダに対応する PNG を置くと自動的に画像描画になります。
+  //   ファイルが存在しない・未ロードの場合は fillRect フォールバックを使用。
+  //   全て 128×128px (TILE_RENDER × TILE_RENDER) で用意してください。
+  // ============================================================
+  const TILE_IMAGES = {
+    // ── フィールド ──────────────────────────────────────────────
+    grass:           'tiles/grass.png',
+    tree:            'tiles/tree.png',
+    water:           'tiles/water.png',
+    flower:          'tiles/flower.png',
+    stone:           'tiles/stone.png',        // 街の石畳
+    town_gate:       'tiles/town_gate.png',    // 街入口
+    dungeon_gate:    'tiles/dungeon_gate.png', // ダンジョン入口
+    // ── ダンジョン ──────────────────────────────────────────────
+    cave_floor:      'tiles/cave_floor.png',
+    cave_wall:       'tiles/cave_wall.png',
+    cave_water:      'tiles/cave_water.png',
+    cave_crystal:    'tiles/cave_crystal.png', // 花→結晶
+    // ── 建物（外観 2×2 タイル） ─────────────────────────────────
+    house_tl:        'tiles/house_tl.png',     // 左上
+    house_tr:        'tiles/house_tr.png',     // 右上
+    house_bl:        'tiles/house_bl.png',     // 左下（汎用）
+    house_br:        'tiles/house_br.png',     // 右下
+    house_inn_bl:    'tiles/house_inn_bl.png', // 宿屋 左下
+    house_shop_bl:   'tiles/house_shop_bl.png',// 道具屋 左下
+    // ── 建物（内装） ────────────────────────────────────────────
+    house_floor:     'tiles/house_floor.png',
+    house_wall:      'tiles/house_wall.png',
+    house_furniture: 'tiles/house_furniture.png', // 家具（HOUSE タイル）
+    house_exit:      'tiles/house_exit.png',   // 出口（TOWN_GATE）
+    // ── 宝箱 ────────────────────────────────────────────────────
+    chest_closed:    'tiles/chest_closed.png',
+    chest_open:      'tiles/chest_open.png',
+  };
+
+  // ロード済み画像を保持するオブジェクト（キー → HTMLImageElement）
+  // loadTileImages() 呼び出し後に各エントリの ._ready が true になる
+  const tileImgs = {};
+
+  // ============================================================
+  // スプライト画像パス設定
+  //   sprites/ フォルダに対応する PNG を置くと自動的に画像描画になります。
+  //   ファイルが存在しない場合は fillRect フォールバックを使用。
+  //   32×32px（論理サイズ）で用意してください（sc 倍で画面に描画されます）。
+  //
+  //   【将来の歩行アニメ拡張に向けた設計メモ】
+  //   128×32px のスプライトシート（横4フレーム）を想定しています。
+  //   dir パラメータ別に行を追加する場合は 128×128px（4方向×4フレーム）。
+  //   drawHero 内のコメントに拡張例を記載しています。
+  // ============================================================
+  const SPRITE_IMAGES = {
+    hero: 'sprites/hero.png', // 主人公スプライトシート（2×2コマ: 左上=下, 右上=右, 左下=左, 右下=上）
+    npc:  'sprites/npc.png',  // NPC（汎用・全NPCで共通使用）
+    boss: 'sprites/boss.png', // ボス（ダークナイト）
+  };
+
+  // ロード済みスプライト画像（キー → HTMLImageElement）
+  // loadSpriteImages() 呼び出し後に各エントリの ._ready が true になる
+  const spriteImgs = {};
+
+  // タイルの種類
+  const T = { GRASS: 0, TREE: 1, WATER: 2, FLOWER: 3, STONE: 4, HOUSE: 5, CHEST: 6, TOWN_GATE: 7, DUNGEON_GATE: 8 };
+
+  // ゲーム状態
+  const S = { MAP: 'map', TALK: 'talk', BATTLE: 'battle', EQUIP: 'equip', WIN: 'win', LOSE: 'lose' };
+
+  // ============================================================
+  // マップデータ（2次元配列）
+  //   0 = 草　（歩ける・エンカウントあり）
+  //   1 = 木　（歩けない）
+  //   2 = 水　（歩けない）
+  //   3 = 花　（歩ける・エンカウントあり）
+  //   4 = 石畳（歩ける・エンカウントなし）← 街エリア
+  //   5 = 建物（歩けない）← 街の建物
+  //
+  // 街「ヒカリのまち」入口は右上（col 10, row 2）
+  // ============================================================
+  const fieldMap = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,3,1,1,0,0,0,0,0,7,0,0,0,0,1],  // row 2：街入口（col10）
+    [1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,3,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+    [1,0,3,0,0,1,1,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,2,2,2,0,0,0,0,0,0,1],
+    [1,0,0,1,0,0,2,2,2,0,0,0,1,0,0,1],
+    [1,0,0,0,0,3,0,0,0,0,0,0,0,8,0,1],  // row 10：ダンジョン入口（col13）
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ];
+  const townMap = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+    [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+    [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+    [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+    [1,4,4,4,4,5,5,4,4,5,5,4,4,4,4,1],
+    [1,4,4,4,4,5,5,4,4,5,5,4,4,4,4,1],
+    [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+    [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+    [1,1,1,1,1,1,4,4,4,4,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ];
+  const dungeonMap = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,4,4,4,1,1,4,4,4,4,4,1,4,4,4,1],
+    [1,4,1,4,1,1,4,1,1,1,4,1,4,1,4,1],
+    [1,4,1,4,4,4,4,1,2,1,4,4,4,1,4,1],
+    [1,4,1,1,1,1,4,1,2,1,1,1,4,1,4,1],
+    [1,4,4,4,4,1,4,4,4,4,4,1,4,4,4,1],
+    [1,1,1,1,4,1,1,1,1,1,4,1,1,1,4,1],
+    [1,4,4,1,4,4,4,4,4,1,4,4,4,1,4,1],
+    [1,4,1,1,1,1,1,1,4,1,1,1,6,1,4,1],
+    [1,4,4,4,4,4,4,1,4,4,4,4,4,4,4,1],
+    [1,1,1,1,1,1,4,4,4,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,4,1,1,1,1,1,1,1,1],
+  ];
+  const houseMaps = {
+    west: [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+      [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,1,1,1,1,1,1,7,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    east: [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,5,5,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,5,5,4,4,4,4,4,4,1],
+      [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+      [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,1,1,1,1,1,1,7,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    inn: [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,5,5,4,4,5,5,4,4,5,5,4,4,4,1],
+      [1,4,5,5,4,4,5,5,4,4,5,5,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,1,1,1,1,1,1,7,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    shop: [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,5,5,5,5,5,5,5,5,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+      [1,4,5,5,4,4,4,4,4,4,4,4,5,5,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+      [1,1,1,1,1,1,1,7,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+  };
+  const HOUSE_ENTRANCES = {
+    '3,3': 'west',
+    '13,3': 'east',
+    '6,6': 'inn',
+    '10,6': 'shop',
+  };
+  let currentMap = fieldMap;
+  let fieldReturn = { x: 9, y: 2 };
+  let townReturn = { x: 9, y: 2 };
+  let dungeonReturn = { x: 13, y: 10 };
+  let houseReturn = { x: 7, y: 4 };
+  let currentHouseId = null;
+
+  // ============================================================
+  // プレイヤーのデータ
+  // ============================================================
+  const WEAPONS = {
+    woodSword: { name: '木の剣', attackBonus: 0 },
+    ironSword: { name: '鉄の剣', attackBonus: 3 },
+    steelSword: { name: '鋼の剣', attackBonus: 6 },
+  };
+  const ARMORS = {
+    travelerClothes: { name: '旅人の服', defenseBonus: 0 },
+    ironArmor: { name: '鉄のよろい', defenseBonus: 3 },
+  };
+
+  const hero = {
+    x: 1, y: 1,          // マップ上の位置（タイル単位・ロジック用）
+    drawX: 1, drawY: 1,  // 描画専用座標（タイル単位小数値・移動補間で更新）
+    hp: 30, maxHp: 30,   // ヒットポイント
+    mp: 12, maxMp: 12,   // マジックポイント
+    atk: 8,  def: 3,     // 攻撃力・防御力
+    weapon: 'woodSword', // 現在の武器
+    armor: 'travelerClothes', // 現在の防具
+    weaponsOwned: ['woodSword'], // 所持武器
+    armorsOwned: ['travelerClothes'], // 所持防具
+    level: 1, exp: 0,    // レベル・経験値
+    gold: 0, potions: 0, // 所持ゴールド・ポーション
+    dir: 'down',          // 向き（down/up/left/right）
+  };
+
+  // ============================================================
+  // 敵データのひな形（バトルのたびにコピーして使う）
+  // ============================================================
+  const SLIME_BASE = {
+    name: 'スライム',
+    hp: 15, maxHp: 15,
+    atk: 5, def: 1,
+    exp: 10,
+    gold: 5,
+    sprite: 'slime',
+  };
+  const BAT_BASE = {
+    name: 'コウモリ',
+    hp: 12, maxHp: 12,
+    atk: 6, def: 0,
+    exp: 8,
+    gold: 6,
+    sprite: 'bat',
+  };
+  const GOBLIN_BASE = {
+    name: 'ゴブリン',
+    hp: 26, maxHp: 26,
+    atk: 8, def: 3,
+    exp: 18,
+    gold: 10,
+    sprite: 'goblin',
+  };
+  const DARK_KNIGHT_BASE = {
+    name: 'ダークナイト',
+    hp: 60, maxHp: 60,
+    atk: 12, def: 5,
+    exp: 50,
+    gold: 40,
+    sprite: 'darkKnight',
+    boss: true,
+  };
+  const BOSS_POS = { x: 14, y: 1 };
+
+  // ============================================================
+  // NPC データ（位置・見た目・セリフ）
+  //   x, y     = マップ上のタイル座標
+  //   bodyCol  = 体の色
+  //   hairCol  = 髪の色
+  //   lines    = セリフの配列（1要素 = 1ページ）
+  // ============================================================
+  const NPCS = [
+    {
+      x: 8, y: 4,
+      name: '長老',
+      bodyCol: '#778877', hairCol: '#cccccc',
+      lines: [
+        'おお、旅人よ。よくぞ　ヒカリのまちへ。',
+        'このあたりの　草むらには',
+        'スライムが　出るから　気をつけるのじゃ！',
+      ],
+      afterBossLines: [
+        'よくやった！　ダークナイトを倒すとは！',
+        'これで　ヒカリのまちにも',
+        'しばらく　平和が戻るじゃろう。',
+        '次は　失われた宝を　探してみるのじゃ。',
+      ],
+    },
+    {
+      x: 11, y: 4,
+      name: 'こども',
+      quest: true,
+      bodyCol: '#ddbb22', hairCol: '#994400',
+      lines: [
+        'ねえねえ！　スライムって　かわいいよね？',
+        'でも　たたかったら　こわかった…',
+        'ゆうしゃさんって　つよいね！',
+      ],
+    },
+  ];
+  const INN_NPCS = [
+    {
+      x: 7, y: 4,
+      name: '宿屋　マリオ',
+      inn: true,
+      bodyCol: '#cc3311', hairCol: '#221100',
+      lines: [
+        'いらっしゃい！　旅人さん。',
+        'ゆっくり　休んでいってくださいね。',
+      ],
+    },
+  ];
+  const SHOP_NPCS = [
+    {
+      x: 7, y: 4,
+      name: '商人　マリオ',
+      shop: true,
+      bodyCol: '#cc3311', hairCol: '#221100',
+      lines: [
+        'いらっしゃい！　ポーションは1個10Gです。',
+      ],
+    },
+  ];
+
+  // ============================================================
+  // ゲーム変数
+  // ============================================================
+  let state    = S.MAP;  // 現在のゲーム状態
+  let foe      = null;   // 戦闘中の敵オブジェクト
+  let msg      = '';     // バトルメッセージ
+  let heroTurn = true;   // プレイヤーのターンかどうか
+  let winMsg   = '';     // 勝利時のメッセージ
+  let moveAnim = { active: false, startX: 0, startY: 0, progress: 0 }; // 移動補間状態
+  let talkNpc  = null;   // 会話中のNPC（nullなら会話していない）
+  let talkPage = 0;      // 現在表示しているセリフのページ番号
+  let slimeKills = 0;    // スライムを倒した数
+  let questDone  = false; // クエスト報酬を受け取ったかどうか
+  let questRewardMsg = ''; // クエスト報酬メッセージ
+  let shopMsg = '';      // 道具屋メッセージ
+  let chestOpened = false; // ダンジョン宝箱を開けたかどうか
+  let bossDefeated = false; // ダークナイトを倒したかどうか
+  let battleBgType = 'field'; // 戦闘に入った場所の背景種別
+  let equipCursor = 0;    // 装備メニューの選択位置
+
+  // ============================================================
+  // Canvas の取得
+  // ============================================================
+  const canvas  = document.getElementById('c');
+  const ctx     = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false; // ピクセルアートを拡大時にぼかさない
+  const btnArea = document.getElementById('btnArea');
+
+  // ============================================================
+  // ユーティリティ
+  // ============================================================
+  function shadeHex(hex, amount) {
+    const raw = hex.replace('#', '');
+    const num = parseInt(raw, 16);
+    const r = Math.max(0, Math.min(255, (num >> 16) + amount));
+    const g = Math.max(0, Math.min(255, ((num >> 8) & 255) + amount));
+    const b = Math.max(0, Math.min(255, (num & 255) + amount));
+
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  }
+
+  // min〜max のランダム整数を返す
+  function rng(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // シャドウ付きテキストを描画する
+  function txt(s, x, y, col = '#fff', sz = 14) {
+    ctx.font = `${sz}px "Courier New", monospace`;
+    ctx.fillStyle = '#000';
+    ctx.fillText(s, x + 1, y + 1); // 影
+    ctx.fillStyle = col;
+    ctx.fillText(s, x, y);
+  }
+
+  // HPバー（横長のゲージ）を描画する
+  function drawBar(x, y, w, cur, max, col) {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x, y, w, 10);
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, Math.round(w * cur / max), 10);
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, 10);
+  }
+
+  function getCurrentWeapon() {
+    return WEAPONS[hero.weapon] || WEAPONS.woodSword;
+  }
+
+  function getHeroAttack() {
+    return hero.atk + getCurrentWeapon().attackBonus;
+  }
+
+  function getCurrentArmor() {
+    return ARMORS[hero.armor] || ARMORS.travelerClothes;
+  }
+
+  function getHeroDefense() {
+    return hero.def + getCurrentArmor().defenseBonus;
+  }
+
+  function getEquipItems() {
+    const weaponItems = hero.weaponsOwned
+      .filter(id => WEAPONS[id])
+      .map(id => ({ type: 'weapon', id, item: WEAPONS[id] }));
+    const armorItems = hero.armorsOwned
+      .filter(id => ARMORS[id])
+      .map(id => ({ type: 'armor', id, item: ARMORS[id] }));
+    return [...weaponItems, ...armorItems];
+  }
+
+  // 経験値を加算し、一定値に達したらレベルアップする
+  function gainExp(amount) {
+    hero.exp += amount;
+    let leveled = false;
+    while (hero.exp >= hero.level * 20) {
+      hero.exp -= hero.level * 20;
+      hero.level++;
+      hero.maxHp += 5;
+      hero.maxMp += 2;
+      hero.atk += 2;
+      hero.hp = hero.maxHp;
+      hero.mp = hero.maxMp;
+      leveled = true;
+    }
+    return leveled;
+  }
+
+  // ============================================================
+  // スプライト描画：主人公
+  //   px, py = 描画するピクセル座標（左上）
+  //   sc     = 拡大率（1=普通, 2=2倍, ...）
+  // ============================================================
+  // hero.png（2×2スプライトシート）から向きに対応するコマ位置を返す。
+  // 戻り値: { img, sx, sy, frameW, frameH } または null（未ロード時 → fillRect フォールバック）
+  // 【歩行アニメ拡張時】コマ数を増やし frame 引数で sx に列オフセットを加算する。
+  function getHeroSpriteInfo(dir) {
+    const img = spriteImgs.hero;
+    if (!img || !img._ready) return null;
+    const frameW = img.width  / 2;
+    const frameH = img.height / 2;
+    const srcMap = { down: [0, 0], right: [frameW, 0], left: [0, frameH], up: [frameW, frameH] };
+    const [sx, sy] = srcMap[dir] ?? [0, 0];
+    return { img, sx, sy, frameW, frameH };
+  }
+
+  function drawHero(px, py, sc = 1, dir = hero.dir || 'down') {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // ── 画像ベース描画（スプライトシートから向きに応じたコマを切り出す） ──
+    const si = getHeroSpriteInfo(dir);
+    if (si) {
+      ctx.drawImage(si.img, si.sx, si.sy, si.frameW, si.frameH, 0, 0, 32, 32);
+      ctx.restore();
+      return;
+    }
+
+    const shadow = () => {
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.fillRect(8, 29, 16, 2);
+    };
+    const boots = () => {
+      ctx.fillStyle = '#6b3b1f';
+      ctx.fillRect(9, 25, 5, 5);
+      ctx.fillRect(18, 25, 5, 5);
+      ctx.fillRect(8, 29, 7, 2);
+      ctx.fillRect(17, 29, 7, 2);
+      ctx.fillStyle = '#3a2418';
+      ctx.fillRect(9, 28, 5, 2);
+      ctx.fillRect(18, 28, 5, 2);
+      ctx.fillRect(8, 30, 7, 1);
+      ctx.fillRect(17, 30, 7, 1);
+      ctx.fillStyle = '#9a6235';
+      ctx.fillRect(10, 25, 3, 1);
+      ctx.fillRect(19, 25, 3, 1);
+      ctx.fillRect(9, 29, 3, 1);
+      ctx.fillRect(18, 29, 3, 1);
+    };
+    const frontBody = () => {
+      ctx.fillStyle = '#9a2434';
+      ctx.fillRect(8, 13, 16, 3);
+      ctx.fillRect(7, 16, 18, 5);
+      ctx.fillRect(8, 21, 16, 5);
+      ctx.fillStyle = '#d64a5a';
+      ctx.fillRect(8, 13, 12, 1);
+      ctx.fillRect(7, 16, 4, 3);
+      ctx.fillRect(9, 14, 9, 2);
+      ctx.fillRect(9, 21, 3, 4);
+      ctx.fillStyle = '#7a1d2b';
+      ctx.fillRect(20, 14, 4, 2);
+      ctx.fillRect(21, 16, 4, 5);
+      ctx.fillRect(20, 21, 4, 5);
+      ctx.fillRect(8, 25, 16, 1);
+      ctx.fillStyle = '#245fd1';
+      ctx.fillRect(6, 15, 4, 7);
+      ctx.fillRect(22, 15, 4, 7);
+      ctx.fillStyle = '#f0b884';
+      ctx.fillRect(5, 21, 4, 4);
+      ctx.fillRect(23, 21, 4, 4);
+      ctx.fillStyle = '#153f91';
+      ctx.fillRect(10, 14, 12, 10);
+      ctx.fillStyle = '#245fd1';
+      ctx.fillRect(11, 15, 10, 7);
+      ctx.fillStyle = '#8fb8ff';
+      ctx.fillRect(13, 15, 2, 7);
+      ctx.fillRect(17, 15, 2, 7);
+      ctx.fillStyle = '#f1d36b';
+      ctx.fillRect(10, 21, 12, 2);
+      ctx.fillStyle = '#6b3b1f';
+      ctx.fillRect(9, 23, 14, 2);
+      ctx.fillStyle = '#ffd85c';
+      ctx.fillRect(15, 22, 2, 3);
+    };
+    const swordRight = () => {
+      // 刃 — 3px幅・青白い鋼
+      ctx.fillStyle = '#e8f0ff';
+      ctx.fillRect(26, 4, 3, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(26, 4, 1, 15);   // 光沢ライン
+      ctx.fillStyle = '#8ab0d0';
+      ctx.fillRect(28, 5, 1, 15);   // 刃の影側
+      // ガード — 金色・幅8px
+      ctx.fillStyle = '#f5d000';
+      ctx.fillRect(23, 18, 8, 3);
+      ctx.fillStyle = '#b09800';
+      ctx.fillRect(23, 20, 8, 1);   // ガード下影
+      // グリップ
+      ctx.fillStyle = '#6b3b1f';
+      ctx.fillRect(26, 21, 3, 6);
+      ctx.fillStyle = '#3a2418';
+      ctx.fillRect(26, 22, 3, 1);   // 巻き革1
+      ctx.fillRect(26, 24, 3, 1);   // 巻き革2
+      // ポンメル — 金
+      ctx.fillStyle = '#f5d000';
+      ctx.fillRect(25, 27, 4, 2);
+    };
+    const faceFront = () => {
+      // 頭全体を2px上にシフト (y-2) → 2.5頭身に近づける
+      ctx.fillStyle = '#d7905c';
+      ctx.fillRect(14, 10, 4, 3);
+      ctx.fillStyle = '#f0b884';
+      ctx.fillRect(10, 4, 12, 8);
+      ctx.fillRect(11, 11, 10, 2);
+      ctx.fillStyle = '#ffd0a0';
+      ctx.fillRect(12, 5, 8, 5);
+      ctx.fillStyle = '#6f3416';
+      ctx.fillRect(9, 2, 14, 4);
+      ctx.fillRect(8, 5, 4, 5);
+      ctx.fillRect(20, 5, 4, 5);
+      ctx.fillStyle = '#5b2a12';
+      ctx.fillRect(19, 2, 4, 4);
+      ctx.fillRect(8, 8, 4, 2);
+      ctx.fillRect(20, 7, 4, 3);
+      ctx.fillStyle = '#b56a2a';
+      ctx.fillRect(10, 2, 6, 1);
+      ctx.fillRect(11, 3, 5, 1);
+      ctx.fillRect(9, 5, 3, 1);
+      ctx.fillRect(12, 5, 3, 2);
+      // 眉毛
+      ctx.fillStyle = '#3a1a06';
+      ctx.fillRect(11, 7, 3, 1);
+      ctx.fillRect(18, 7, 3, 1);
+      // 目 — 2x3px に拡大
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(12, 8, 2, 3);
+      ctx.fillRect(18, 8, 2, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(12, 8, 1, 1);
+      ctx.fillRect(18, 8, 1, 1);
+      ctx.fillStyle = '#8c4d32';
+      ctx.fillRect(15, 10, 2, 1);
+    };
+    const drawDown = () => {
+      shadow();
+      boots();
+      frontBody();
+      swordRight();   // body の上に重ねて剣を目立たせる
+      faceFront();
+    };
+    const drawUp = () => {
+      shadow();
+      ctx.fillStyle = '#d7e0ea';
+      ctx.fillRect(4, 9, 2, 14);
+      ctx.fillStyle = '#8a5a25';
+      ctx.fillRect(3, 22, 5, 2);
+      boots();
+      ctx.fillStyle = '#7a1d2b';
+      ctx.fillRect(7, 13, 18, 13);
+      ctx.fillStyle = '#b83244';
+      ctx.fillRect(8, 13, 12, 2);
+      ctx.fillRect(8, 15, 4, 6);
+      ctx.fillRect(10, 22, 9, 3);
+      ctx.fillStyle = '#5e1722';
+      ctx.fillRect(21, 14, 4, 10);
+      ctx.fillRect(8, 24, 16, 2);
+      ctx.fillStyle = '#153f91';
+      ctx.fillRect(10, 15, 12, 9);
+      ctx.fillStyle = '#1f4fb3';
+      ctx.fillRect(11, 15, 8, 2);
+      ctx.fillRect(11, 17, 5, 6);
+      ctx.fillStyle = '#6fa0ff';
+      ctx.fillRect(11, 15, 4, 1);
+      ctx.fillRect(11, 16, 2, 5);
+      ctx.fillStyle = '#0f347f';
+      ctx.fillRect(19, 17, 3, 7);
+      ctx.fillRect(14, 22, 8, 2);
+      ctx.fillStyle = '#6b3b1f';
+      ctx.fillRect(9, 23, 14, 2);
+      ctx.fillStyle = '#9a6235';
+      ctx.fillRect(9, 23, 5, 1);
+      ctx.fillStyle = '#3a2418';
+      ctx.fillRect(18, 24, 5, 1);
+      ctx.fillStyle = '#6f3416';
+      ctx.fillRect(9, 5, 14, 8);
+      ctx.fillRect(8, 9, 16, 4);
+      ctx.fillStyle = '#5b2a12';
+      ctx.fillRect(20, 5, 3, 8);
+      ctx.fillRect(8, 11, 16, 2);
+      ctx.fillStyle = '#b56a2a';
+      ctx.fillRect(10, 5, 6, 1);
+      ctx.fillRect(11, 6, 5, 1);
+      ctx.fillRect(9, 9, 5, 1);
+      ctx.fillRect(10, 10, 4, 1);
+    };
+    const drawRight = () => {
+      shadow();
+      ctx.fillStyle = '#7a1d2b';
+      ctx.fillRect(8, 14, 14, 12);
+      ctx.fillStyle = '#b83244';
+      ctx.fillRect(10, 15, 10, 3);
+      swordRight();
+      boots();
+      ctx.fillStyle = '#153f91';
+      ctx.fillRect(11, 14, 11, 10);
+      ctx.fillStyle = '#245fd1';
+      ctx.fillRect(14, 15, 7, 7);
+      ctx.fillStyle = '#8fb8ff';
+      ctx.fillRect(18, 15, 2, 7);
+      ctx.fillStyle = '#6b3b1f';
+      ctx.fillRect(10, 23, 13, 2);
+      ctx.fillStyle = '#245fd1';
+      ctx.fillRect(22, 16, 4, 6);
+      ctx.fillStyle = '#f0b884';
+      ctx.fillRect(24, 21, 4, 4);
+      ctx.fillRect(12, 7, 10, 7);
+      ctx.fillRect(13, 13, 8, 2);
+      ctx.fillStyle = '#ffd0a0';
+      ctx.fillRect(16, 8, 5, 4);
+      ctx.fillStyle = '#6f3416';
+      ctx.fillRect(10, 4, 12, 4);
+      ctx.fillRect(9, 7, 5, 6);
+      ctx.fillRect(18, 7, 5, 4);
+      ctx.fillStyle = '#5b2a12';
+      ctx.fillRect(19, 4, 3, 4);
+      ctx.fillRect(9, 10, 5, 3);
+      ctx.fillRect(18, 9, 5, 2);
+      ctx.fillStyle = '#b56a2a';
+      ctx.fillRect(11, 4, 5, 1);
+      ctx.fillRect(12, 5, 4, 1);
+      ctx.fillRect(10, 7, 3, 1);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(19, 10, 2, 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(19, 10, 1, 1);
+      ctx.fillStyle = '#8c4d32';
+      ctx.fillRect(19, 12, 2, 1);
+    };
+
+    if (dir === 'up') {
+      drawUp();
+    } else if (dir === 'left') {
+      ctx.save();
+      ctx.translate(32, 0);
+      ctx.scale(-1, 1);
+      drawRight();
+      ctx.restore();
+    } else if (dir === 'right') {
+      drawRight();
+    } else {
+      drawDown();
+    }
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  // スプライト描画：スライム
+  // ============================================================
+  function drawSlime(px, py, sc = 1) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // 影
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(6, 26, 20, 4);
+
+    // 体（明るい緑）
+    ctx.fillStyle = '#44cc44';
+    ctx.fillRect(4, 14, 24, 12);
+    ctx.fillRect(8, 10, 16, 16);
+    ctx.fillRect(6, 12, 20, 14);
+
+    // ハイライト（光沢）
+    ctx.fillStyle = '#77ee77';
+    ctx.fillRect(10, 12, 6, 4);
+
+    // 暗い部分（底）
+    ctx.fillStyle = '#228822';
+    ctx.fillRect(4, 22, 24, 4);
+
+    // 目
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(10, 17, 4, 4);
+    ctx.fillRect(18, 17, 4, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(10, 17, 2, 2);
+    ctx.fillRect(18, 17, 2, 2);
+
+    // 口
+    ctx.fillStyle = '#004400';
+    ctx.fillRect(12, 22, 8, 2);
+
+    ctx.restore();
+  }
+
+  function drawBat(px, py, sc = 1) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(7, 27, 18, 3);
+
+    ctx.fillStyle = '#2b2240';
+    ctx.fillRect(4, 12, 8, 4);
+    ctx.fillRect(20, 12, 8, 4);
+    ctx.fillRect(2, 16, 10, 4);
+    ctx.fillRect(20, 16, 10, 4);
+    ctx.fillRect(5, 20, 5, 3);
+    ctx.fillRect(22, 20, 5, 3);
+    ctx.fillStyle = '#4a3a66';
+    ctx.fillRect(9, 14, 14, 10);
+    ctx.fillRect(11, 10, 10, 8);
+    ctx.fillStyle = '#6a5a88';
+    ctx.fillRect(13, 12, 6, 3);
+    ctx.fillStyle = '#1a1428';
+    ctx.fillRect(12, 22, 8, 3);
+
+    ctx.fillStyle = '#dd3333';
+    ctx.fillRect(12, 16, 3, 3);
+    ctx.fillRect(18, 16, 3, 3);
+    ctx.fillStyle = '#ff9999';
+    ctx.fillRect(12, 16, 1, 1);
+    ctx.fillRect(18, 16, 1, 1);
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(13, 20, 2, 3);
+    ctx.fillRect(18, 20, 2, 3);
+
+    ctx.restore();
+  }
+
+  function drawGoblin(px, py, sc = 1) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(7, 27, 18, 3);
+
+    ctx.fillStyle = '#2a1810';
+    ctx.fillRect(8, 25, 6, 5);
+    ctx.fillRect(18, 25, 6, 5);
+    ctx.fillStyle = '#3a2418';
+    ctx.fillRect(8, 25, 5, 4);
+    ctx.fillRect(18, 25, 5, 4);
+    ctx.fillStyle = '#5c3828';
+    ctx.fillRect(8, 25, 3, 1);
+    ctx.fillRect(18, 25, 3, 1);
+    ctx.fillStyle = '#6b3b1f';
+    ctx.fillRect(9, 16, 14, 10);
+    ctx.fillStyle = '#8a5a25';
+    ctx.fillRect(10, 17, 12, 3);
+    ctx.fillStyle = '#3f7a2d';
+    ctx.fillRect(7, 14, 5, 8);
+    ctx.fillRect(21, 14, 5, 8);
+    ctx.fillStyle = '#4f9a38';
+    ctx.fillRect(10, 6, 12, 9);
+    ctx.fillRect(8, 9, 16, 5);
+    ctx.fillStyle = '#6fbd47';
+    ctx.fillRect(12, 7, 8, 4);
+    ctx.fillStyle = '#2e5c20';
+    ctx.fillRect(7, 8, 4, 2);
+    ctx.fillRect(21, 8, 4, 2);
+
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(12, 11, 3, 2);
+    ctx.fillRect(18, 11, 3, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(12, 11, 1, 1);
+    ctx.fillRect(18, 11, 1, 1);
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(15, 14, 2, 3);
+    ctx.fillRect(18, 14, 2, 3);
+    ctx.fillStyle = '#5c2c1f';
+    ctx.fillRect(13, 21, 6, 2);
+
+    ctx.fillStyle = '#777';
+    ctx.fillRect(26, 12, 2, 11);
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(25, 10, 4, 4);
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(24, 21, 5, 2);
+
+    ctx.restore();
+  }
+
+  function drawDarkKnight(px, py, sc = 1) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // ── 画像ベース描画（読み込み済みなら drawImage を優先） ────────────
+    if (spriteImgs.boss && spriteImgs.boss._ready) {
+      ctx.drawImage(spriteImgs.boss, 0, 0, 32, 32);
+      ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.fillRect(6, 28, 20, 3);
+
+    ctx.fillStyle = '#161625';
+    ctx.fillRect(8, 13, 16, 14);
+    ctx.fillStyle = '#2a2a44';
+    ctx.fillRect(10, 14, 12, 11);
+    ctx.fillStyle = '#50506c';
+    ctx.fillRect(12, 15, 3, 10);
+    ctx.fillRect(17, 15, 3, 10);
+    ctx.fillStyle = '#3e1520';
+    ctx.fillRect(7, 17, 4, 9);
+    ctx.fillRect(21, 17, 4, 9);
+    ctx.fillStyle = '#5b1f2f';
+    ctx.fillRect(8, 18, 2, 7);
+    ctx.fillRect(22, 18, 2, 7);
+
+    ctx.fillStyle = '#11111a';
+    ctx.fillRect(10, 5, 12, 9);
+    ctx.fillRect(8, 8, 16, 5);
+    ctx.fillStyle = '#3f3f5a';
+    ctx.fillRect(11, 6, 10, 3);
+    ctx.fillStyle = '#5a5a7c';
+    ctx.fillRect(11, 6, 4, 1);
+    ctx.fillRect(9, 8, 3, 1);
+    ctx.fillStyle = '#dd3333';
+    ctx.fillRect(12, 10, 3, 2);
+    ctx.fillRect(18, 10, 3, 2);
+    ctx.fillStyle = '#ff9999';
+    ctx.fillRect(12, 10, 1, 1);
+    ctx.fillRect(18, 10, 1, 1);
+    ctx.fillStyle = '#d7e0ea';
+    ctx.fillRect(15, 4, 2, 5);
+    ctx.fillRect(13, 5, 6, 1);
+
+    ctx.fillStyle = '#161628';
+    ctx.fillRect(8, 25, 6, 5);
+    ctx.fillRect(18, 25, 6, 5);
+    ctx.fillStyle = '#242438';
+    ctx.fillRect(8, 25, 5, 4);
+    ctx.fillRect(18, 25, 5, 4);
+    ctx.fillStyle = '#3a3a52';
+    ctx.fillRect(8, 25, 3, 1);
+    ctx.fillRect(18, 25, 3, 1);
+    ctx.fillStyle = '#777';
+    ctx.fillRect(27, 8, 2, 17);
+    ctx.fillStyle = '#d7e0ea';
+    ctx.fillRect(26, 6, 4, 5);
+    ctx.fillStyle = '#8a5a25';
+    ctx.fillRect(25, 22, 6, 2);
+
+    ctx.restore();
+  }
+
+  function drawEnemy(enemy, px, py, sc = 1) {
+    if (enemy.sprite === 'bat') {
+      drawBat(px, py, sc);
+    } else if (enemy.sprite === 'goblin') {
+      drawGoblin(px, py, sc);
+    } else if (enemy.sprite === 'darkKnight') {
+      drawDarkKnight(px, py, sc);
+    } else {
+      drawSlime(px, py, sc);
+    }
+  }
+
+  // ============================================================
+  // スプライト描画：NPC
+  //   bodyCol = 体の色、hairCol = 髪の色（NPCごとに異なる）
+  // ============================================================
+  function drawNPC(px, py, sc, bodyCol, hairCol) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(sc, sc);
+
+    // ── 画像ベース描画（読み込み済みなら drawImage を優先） ────────────
+    // 注意: 画像使用時は bodyCol/hairCol による色変化は反映されません
+    if (spriteImgs.npc && spriteImgs.npc._ready) {
+      ctx.drawImage(spriteImgs.npc, 0, 0, 32, 32);
+      ctx.restore();
+      return;
+    }
+
+    // 足
+    ctx.fillStyle = '#444';
+    ctx.fillRect(10, 25, 5, 6);
+    ctx.fillRect(17, 25, 5, 6);
+
+    // 体（bodyColで色を変える）
+    ctx.fillStyle = bodyCol;
+    ctx.fillRect(9, 14, 14, 12);
+    ctx.fillStyle = shadeHex(bodyCol, 35);
+    ctx.fillRect(9, 14, 9, 2);
+    ctx.fillRect(9, 16, 3, 7);
+    ctx.fillStyle = shadeHex(bodyCol, -45);
+    ctx.fillRect(19, 17, 4, 9);
+    ctx.fillRect(12, 24, 11, 2);
+
+    // 腕（肌色）
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(5, 15, 5, 8);
+    ctx.fillRect(22, 15, 5, 8);
+    ctx.fillStyle = '#ffe0b8';
+    ctx.fillRect(5, 15, 3, 2);
+    ctx.fillRect(22, 15, 3, 2);
+    ctx.fillStyle = '#d99a66';
+    ctx.fillRect(8, 20, 2, 3);
+    ctx.fillRect(25, 20, 2, 3);
+
+    // 首・頭（肌色）
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(13, 11, 6, 4);
+    ctx.fillRect(9, 5, 14, 10);
+
+    // 髪（hairColで色を変える）
+    ctx.fillStyle = hairCol;
+    ctx.fillRect(9, 5, 14, 4);
+    ctx.fillRect(9, 5, 3, 8);
+    ctx.fillRect(20, 5, 3, 8);
+    ctx.fillStyle = shadeHex(hairCol, 35);
+    ctx.fillRect(9, 5, 9, 1);
+    ctx.fillRect(9, 6, 3, 4);
+    ctx.fillStyle = shadeHex(hairCol, -45);
+    ctx.fillRect(19, 8, 4, 1);
+    ctx.fillRect(20, 9, 3, 4);
+
+    // 目
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(12, 11, 2, 2);
+    ctx.fillRect(18, 11, 2, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(12, 11, 1, 1);
+    ctx.fillRect(18, 11, 1, 1);
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  // タイル1枚を描画する
+  // ============================================================
+  function drawTorch(x, y) {
+    const p = n => Math.max(1, Math.round(n * TILE_RENDER / 32));
+
+    // 松明の周囲の光
+    ctx.fillStyle = 'rgba(255, 200, 80, 0.12)';
+    ctx.fillRect(x + p(6), y + p(4), p(20), p(20));
+
+    // 木の柄
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(x + p(14), y + p(10), p(2), p(10));
+
+    // 炎（3段階）
+    ctx.fillStyle = '#ff6633';
+    ctx.fillRect(x + p(12), y + p(6), p(6), p(6));
+
+    ctx.fillStyle = '#ffcc33';
+    ctx.fillRect(x + p(13), y + p(7), p(4), p(4));
+
+    ctx.fillStyle = '#ffff66';
+    ctx.fillRect(x + p(14), y + p(8), p(2), p(2));
+  }
+
+  // ============================================================
+  // タイル画像キー判定
+  //   col, row のタイルに対応する TILE_IMAGES キーを返す。
+  //   画像を用意していないタイルは null を返す → fillRect フォールバック。
+  // ============================================================
+  function getTileImageKey(col, row) {
+    const t         = currentMap[row][col];
+    const isDungeon = currentMap === dungeonMap;
+    const isHouse   = isHouseMap(currentMap);
+
+    if (t === T.GRASS) {
+      if (isHouse)   return 'house_floor';
+      if (isDungeon) return 'cave_floor';
+      return 'grass';
+    }
+    if (t === T.TREE) {
+      if (isHouse)   return 'house_wall';
+      if (isDungeon) return 'cave_wall';
+      return 'tree';
+    }
+    if (t === T.WATER)  return isDungeon ? 'cave_water'   : 'water';
+    if (t === T.FLOWER) return isDungeon ? 'cave_crystal' : 'flower';
+    if (t === T.STONE) {
+      if (isHouse)   return 'house_floor';
+      if (isDungeon) return 'cave_floor';
+      return 'stone';
+    }
+    if (t === T.CHEST)        return chestOpened ? 'chest_open' : 'chest_closed';
+    if (t === T.TOWN_GATE)    return isHouse ? 'house_exit' : 'town_gate';
+    if (t === T.DUNGEON_GATE) return 'dungeon_gate';
+    if (t === T.HOUSE) {
+      if (isHouse) return 'house_furniture';
+      // 2×2 建物の4分割パートを判定
+      const hasLeft = col > 0 && currentMap[row][col - 1] === T.HOUSE;
+      const hasTop  = row > 0 && currentMap[row - 1][col] === T.HOUSE;
+      const part    = hasTop ? (hasLeft ? 'br' : 'bl') : (hasLeft ? 'tr' : 'tl');
+      const isInn   = currentMap === townMap && col >= 5 && col <= 6 && row >= 5 && row <= 6;
+      const isShop  = currentMap === townMap && col >= 9 && col <= 10 && row >= 5 && row <= 6;
+      if (part === 'bl' && isInn)  return 'house_inn_bl';
+      if (part === 'bl' && isShop) return 'house_shop_bl';
+      return `house_${part}`;
+    }
+    return null;
+  }
+
+  // ============================================================
+  // タイル画像の事前ロード（ゲーム開始時に一度だけ呼び出す）
+  //   onload で ._ready = true になったものだけ drawImage で使用。
+  //   ファイルが存在しない場合は onerror になるが、._ready は false のまま
+  //   なので自動的に fillRect フォールバックが使われる。
+  // ============================================================
+  function loadTileImages() {
+    for (const [key, src] of Object.entries(TILE_IMAGES)) {
+      const img    = new Image();
+      img._ready   = false;
+      img.onload   = () => { img._ready = true; };
+      img.onerror  = () => { /* ファイルなし → fillRect フォールバック */ };
+      img.src      = src;
+      tileImgs[key] = img;
+    }
+  }
+
+  // ============================================================
+  // スプライト画像の事前ロード（ゲーム開始時に一度だけ呼び出す）
+  //   loadTileImages() と同じ仕組み。._ready が true になったものだけ drawImage 使用。
+  // ============================================================
+  function loadSpriteImages() {
+    for (const [key, src] of Object.entries(SPRITE_IMAGES)) {
+      const img   = new Image();
+      img._ready  = false;
+      img.onload  = () => { img._ready = true; };
+      img.onerror = () => { /* ファイルなし → fillRect フォールバック */ };
+      img.src     = src;
+      spriteImgs[key] = img;
+    }
+  }
+
+  function drawTile(col, row, camCol = 0, camRow = 0) {
+    const x = Math.round((col - camCol) * TILE_RENDER);
+    const y = Math.round((row - camRow) * TILE_RENDER);
+    const t = currentMap[row][col];
+
+    // ── 画像ベース描画（読み込み済みなら drawImage を優先） ────────────
+    const imgKey = getTileImageKey(col, row);
+    if (imgKey && tileImgs[imgKey] && tileImgs[imgKey]._ready) {
+      ctx.drawImage(tileImgs[imgKey], x, y, TILE_RENDER, TILE_RENDER);
+      // 松明エフェクトは画像タイルの上にオーバーレイする
+      if (currentMap === dungeonMap && t === T.TREE && (col + row) % 7 === 0) {
+        drawTorch(x, y);
+      }
+      return;
+    }
+
+    // ── フォールバック: fillRect 描画（画像が未ロード・未配置の場合） ──
+    const p = n => Math.max(1, Math.round(n * TILE_RENDER / 32)); // 描画スケール関数
+    const dot = (dx, dy, col) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(x + p(dx), y + p(dy), p(1), p(1));
+    };
+    const isDungeon = currentMap === dungeonMap;
+    const isHouse = isHouseMap(currentMap);
+
+    const grassBase = () => {
+      ctx.fillStyle = '#4f963f'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+      ctx.fillStyle = '#69b85a';
+      ctx.fillRect(x + p(3),  y + p(4),  p(3), p(1));
+      ctx.fillRect(x + p(10), y + p(12), p(3), p(1));
+      ctx.fillRect(x + p(19), y + p(5),  p(2), p(2));
+      ctx.fillRect(x + p(7),  y + p(25), p(3), p(1));
+      ctx.fillStyle = '#39722f';
+      ctx.fillRect(x + p(18), y + p(18), p(2), p(1));
+      ctx.fillRect(x + p(24), y + p(21), p(3), p(1));
+      ctx.fillRect(x + p(13), y + p(27), p(2), p(1));
+      ctx.fillRect(x + p(27), y + p(27), p(3), p(1));
+      for (let i = 0; i < 18; i++) {
+        const seed = (col * 73 + row * 97 + i * 53) & 255;
+        const dx = (seed * 17 + i * 11) % 30 + 1;
+        const dy = (seed * 29 + i * 7) % 30 + 1;
+        const shade = dx + dy > 42 && seed % 3 !== 0 ? '#2f6429' : seed % 2 === 0 ? '#69b85a' : '#4f963f';
+        dot(dx, dy, shade);
+      }
+    };
+
+    // ============================================================
+    // 洞窟専用タイル描画
+    // ============================================================
+    const caveFloor = () => {
+      // 暗い岩床（通路・歩けるエリア）
+      ctx.fillStyle = '#2a2824'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+      ctx.fillStyle = '#1e1c1a';
+      ctx.fillRect(x,          y,          TILE_RENDER,  p(1));
+      ctx.fillRect(x,          y,          p(1),  TILE_RENDER);
+      ctx.fillRect(x + p(16),  y + p(1),   p(1),  p(15));
+      ctx.fillRect(x + p(1),   y + p(16),  p(15), p(1));
+      ctx.fillRect(x + p(17),  y + p(16),  p(15), p(1));
+      ctx.fillRect(x,          y + p(16),  p(1),  p(16));
+      ctx.fillStyle = '#353028';
+      ctx.fillRect(x + p(2),   y + p(2),   p(12), p(12));
+      ctx.fillRect(x + p(18),  y + p(18),  p(12), p(12));
+      ctx.fillStyle = '#3f3a34';
+      ctx.fillRect(x + p(3),   y + p(3),   p(4),  p(1));
+      ctx.fillRect(x + p(20),  y + p(19),  p(4),  p(1));
+      const s = (col * 71 + row * 89) & 255;
+      if (s % 5 === 0) { ctx.fillStyle = '#221f1d'; ctx.fillRect(x + p(8),  y + p(10), p(3), p(1)); }
+      if (s % 7 === 1) { ctx.fillStyle = '#1e1c1a'; ctx.fillRect(x + p(20), y + p(8),  p(2), p(2)); }
+    };
+
+    const caveWall = () => {
+      // 岩壁（通れないエリア）
+      ctx.fillStyle = '#1a1816'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+      ctx.fillStyle = '#141210';
+      ctx.fillRect(x,          y + p(20), TILE_RENDER,  p(12));
+      ctx.fillStyle = '#252220';
+      ctx.fillRect(x + p(3),   y + p(2),  p(26), p(18));
+      ctx.fillStyle = '#2e2a28';
+      ctx.fillRect(x + p(6),   y + p(4),  p(20), p(12));
+      // 岩肌テクスチャ・ひび
+      ctx.fillStyle = '#3a3530';
+      ctx.fillRect(x + p(7),   y + p(5),  p(5),  p(2));
+      ctx.fillRect(x + p(18),  y + p(10), p(6),  p(2));
+      ctx.fillRect(x + p(10),  y + p(15), p(4),  p(3));
+      ctx.fillStyle = '#1a1816';
+      ctx.fillRect(x + p(8),   y + p(6),  p(2),  p(8));
+      ctx.fillRect(x + p(20),  y + p(4),  p(2),  p(6));
+      ctx.fillStyle = '#403c38';
+      ctx.fillRect(x + p(9),   y + p(4),  p(3),  p(1));
+      ctx.fillRect(x + p(19),  y + p(9),  p(4),  p(1));
+      // 苔（暗緑）
+      ctx.fillStyle = '#1c2518';
+      ctx.fillRect(x + p(4),   y + p(16), p(4),  p(3));
+      ctx.fillRect(x + p(22),  y + p(20), p(5),  p(3));
+      dot(14, 8, '#2e2a28'); dot(24, 14, '#403c38'); dot(6, 24, '#141210');
+    };
+
+    const caveWater = () => {
+      // 地下水（暗く静かな水面）
+      ctx.fillStyle = '#0d1520'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+      ctx.fillStyle = '#0a1018';
+      ctx.fillRect(x,          y + p(24), TILE_RENDER,  p(8));
+      ctx.fillStyle = '#111a28';
+      ctx.fillRect(x,          y + p(2),  TILE_RENDER,  p(3));
+      ctx.fillStyle = '#162030';
+      ctx.fillRect(x + p(3),   y + p(7),  p(10), p(2));
+      ctx.fillRect(x + p(16),  y + p(19), p(10), p(2));
+      ctx.fillRect(x + p(6),   y + p(24), p(7),  p(1));
+      ctx.fillStyle = '#1e2e40';
+      ctx.fillRect(x + p(5),   y + p(14), p(8),  p(2));
+      ctx.fillRect(x + p(18),  y + p(5),  p(5),  p(1));
+      // うっすらした水面の反射
+      ctx.fillStyle = '#1a3050';
+      ctx.fillRect(x + p(7),   y + p(7),  p(3),  p(1));
+      ctx.fillRect(x + p(20),  y + p(19), p(3),  p(1));
+      dot(26, 26, '#080e16'); dot(3, 21, '#080e16'); dot(14, 13, '#1e3050');
+    };
+
+    const caveCrystal = () => {
+      // 石床＋結晶クラスター
+      caveFloor();
+      ctx.fillStyle = '#3a4a6a';
+      ctx.fillRect(x + p(12), y + p(16), p(8),  p(12));
+      ctx.fillStyle = '#4a5a88';
+      ctx.fillRect(x + p(13), y + p(14), p(4),  p(5));
+      ctx.fillRect(x + p(19), y + p(16), p(3),  p(4));
+      ctx.fillStyle = '#6070aa';
+      ctx.fillRect(x + p(14), y + p(11), p(3),  p(5));
+      ctx.fillRect(x + p(18), y + p(13), p(2),  p(5));
+      ctx.fillStyle = '#8090cc';
+      ctx.fillRect(x + p(15), y + p(9),  p(2),  p(4));
+      // 結晶ハイライト
+      ctx.fillStyle = '#aab8ee';
+      ctx.fillRect(x + p(15), y + p(9),  p(1),  p(2));
+      ctx.fillRect(x + p(18), y + p(13), p(1),  p(1));
+      // 小石
+      ctx.fillStyle = '#4a4540';
+      ctx.fillRect(x + p(4),  y + p(20), p(3),  p(2));
+      ctx.fillRect(x + p(24), y + p(22), p(3),  p(2));
+      ctx.fillStyle = '#5a5550';
+      ctx.fillRect(x + p(4),  y + p(20), p(2),  p(1));
+    };
+
+    const houseFloor = () => {
+      ctx.fillStyle = '#6a4a28'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+      ctx.fillStyle = '#7a5630';
+      ctx.fillRect(x, y, TILE_RENDER, p(2));
+      ctx.fillRect(x, y + p(15), TILE_RENDER, p(1));
+      ctx.fillStyle = '#4a321d';
+      ctx.fillRect(x, y + p(30), TILE_RENDER, p(2));
+      ctx.fillRect(x + p(15), y, p(1), TILE_RENDER);
+    };
+
+    const houseWall = () => {
+      ctx.fillStyle = '#3a2418'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+      ctx.fillStyle = '#5a3520';
+      ctx.fillRect(x + p(2), y + p(2), p(28), p(28));
+      ctx.fillStyle = '#2a1810';
+      ctx.fillRect(x, y + p(24), TILE_RENDER, p(8));
+      ctx.fillStyle = '#7a4a2a';
+      ctx.fillRect(x + p(4), y + p(5), p(24), p(3));
+      ctx.fillRect(x + p(4), y + p(14), p(24), p(3));
+    };
+
+    const houseExit = () => {
+      houseFloor();
+      ctx.fillStyle = '#2b1a0c';
+      ctx.fillRect(x + p(7), y + p(8), p(18), p(22));
+      ctx.fillStyle = '#553311';
+      ctx.fillRect(x + p(8), y + p(9), p(16), p(21));
+      ctx.fillStyle = '#7a4a20';
+      ctx.fillRect(x + p(9), y + p(10), p(6), p(3));
+      ctx.fillStyle = '#e0b84a';
+      ctx.fillRect(x + p(20), y + p(19), p(2), p(2));
+    };
+
+    if (t === T.TREE) {
+      if (isHouse) {
+        houseWall();
+      } else if (isDungeon) {
+        caveWall();
+      } else {
+        grassBase();
+        ctx.fillStyle = '#5c4033'; ctx.fillRect(x + p(13), y + p(19), p(6), p(13));
+        ctx.fillStyle = '#7a543d'; ctx.fillRect(x + p(15), y + p(20), p(2), p(10));
+        ctx.fillStyle = '#3b261d'; ctx.fillRect(x + p(13), y + p(24), p(1), p(6));
+        ctx.fillStyle = '#2d5a1b'; ctx.fillRect(x + p(6),  y + p(14), p(20), p(12));
+        ctx.fillStyle = '#3a7222'; ctx.fillRect(x + p(8),  y + p(8),  p(16), p(11));
+        ctx.fillStyle = '#4a8c2a'; ctx.fillRect(x + p(11), y + p(4),  p(10), p(8));
+        ctx.fillStyle = '#1f4315';
+        ctx.fillRect(x + p(7),  y + p(20), p(4), p(2));
+        ctx.fillRect(x + p(20), y + p(18), p(4), p(2));
+        ctx.fillRect(x + p(10), y + p(11), p(3), p(2));
+        ctx.fillStyle = '#5ca83a';
+        ctx.fillRect(x + p(12), y + p(6),  p(3), p(2));
+        ctx.fillRect(x + p(16), y + p(10), p(4), p(2));
+        ctx.fillRect(x + p(9),  y + p(16), p(5), p(2));
+        dot(23, 13, '#5ca83a'); dot(18, 5, '#6fbd47'); dot(14, 23, '#244f18');
+      }
+
+    } else if (t === T.WATER) {
+      if (isDungeon) {
+        caveWater();
+      } else {
+        ctx.fillStyle = '#1a4488'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+        ctx.fillStyle = '#173a75';
+        ctx.fillRect(x, y + p(26), TILE_RENDER, p(6));
+        ctx.fillStyle = '#1f4f9d';
+        ctx.fillRect(x, y + p(3), TILE_RENDER, p(3));
+        ctx.fillStyle = '#2255aa';
+        ctx.fillRect(x + p(2),  y + p(8),  p(13), p(2));
+        ctx.fillRect(x + p(16), y + p(20), p(12), p(2));
+        ctx.fillRect(x + p(5),  y + p(25), p(9),  p(1));
+        ctx.fillRect(x + p(22), y + p(12), p(7),  p(1));
+        ctx.fillStyle = '#3377cc';
+        ctx.fillRect(x + p(4),  y + p(16), p(9), p(2));
+        ctx.fillRect(x + p(18), y + p(6),  p(6), p(1));
+        ctx.fillRect(x + p(10), y + p(29), p(8), p(1));
+        ctx.fillStyle = '#6aa7e8';
+        ctx.fillRect(x + p(6),  y + p(8),  p(4), p(1));
+        ctx.fillRect(x + p(20), y + p(20), p(4), p(1));
+        dot(27, 27, '#0f2f66'); dot(2, 22, '#0f2f66'); dot(14, 14, '#6aa7e8');
+      }
+
+    } else if (t === T.FLOWER) {
+      if (isDungeon) {
+        caveCrystal();
+      } else {
+        grassBase();
+        ctx.fillStyle = '#5aa84e';
+        ctx.fillRect(x + p(4),  y + p(6),  p(2), p(2));
+        ctx.fillRect(x + p(20), y + p(20), p(2), p(2));
+        ctx.fillStyle = '#3a6e30'; ctx.fillRect(x + p(15), y + p(18), p(2), p(8));
+        ctx.fillStyle = '#c93f82';
+        ctx.fillRect(x + p(11), y + p(12), p(4), p(4));
+        ctx.fillRect(x + p(17), y + p(12), p(4), p(4));
+        ctx.fillRect(x + p(14), y + p(9),  p(4), p(4));
+        ctx.fillRect(x + p(14), y + p(15), p(4), p(4));
+        ctx.fillStyle = '#ff66aa';
+        ctx.fillRect(x + p(11), y + p(12), p(3), p(3));
+        ctx.fillRect(x + p(17), y + p(12), p(3), p(3));
+        ctx.fillRect(x + p(14), y + p(9),  p(3), p(3));
+        ctx.fillRect(x + p(14), y + p(15), p(3), p(3));
+        ctx.fillStyle = '#ff99c8';
+        ctx.fillRect(x + p(11), y + p(12), p(2), p(1));
+        ctx.fillRect(x + p(17), y + p(12), p(2), p(1));
+        ctx.fillRect(x + p(14), y + p(9),  p(2), p(1));
+        ctx.fillRect(x + p(14), y + p(15), p(2), p(1));
+        ctx.fillStyle = '#d6b800'; ctx.fillRect(x + p(14), y + p(12), p(4), p(4));
+        ctx.fillStyle = '#ffee00'; ctx.fillRect(x + p(14), y + p(12), p(3), p(2));
+      }
+
+    } else if (t === T.STONE) {
+      if (isHouse) {
+        houseFloor();
+      } else if (isDungeon) {
+        caveFloor();
+      } else {
+        // 石畳（街の床）
+        ctx.fillStyle = '#8a8070'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+        ctx.fillStyle = '#6a6058';
+        ctx.fillRect(x,          y,          TILE_RENDER,  p(1));
+        ctx.fillRect(x,          y,          p(1),  TILE_RENDER);
+        ctx.fillRect(x + p(16),  y + p(1),   p(1),  p(15));
+        ctx.fillRect(x + p(1),   y + p(16),  p(15), p(1));
+        ctx.fillRect(x + p(17),  y + p(16),  p(15), p(1));
+        ctx.fillRect(x,          y + p(16),  p(1),  p(16));
+        ctx.fillStyle = '#9e9080';
+        ctx.fillRect(x + p(2),   y + p(2),   p(12), p(12));
+        ctx.fillRect(x + p(18),  y + p(18),  p(12), p(12));
+        ctx.fillStyle = '#7c7268';
+        ctx.fillRect(x + p(3),   y + p(13),  p(10), p(1));
+        ctx.fillRect(x + p(19),  y + p(29),  p(8),  p(1));
+        ctx.fillRect(x + p(29),  y + p(19),  p(1),  p(9));
+        ctx.fillStyle = '#b0a090';
+        ctx.fillRect(x + p(4),   y + p(3),   p(5),  p(1));
+        ctx.fillRect(x + p(20),  y + p(19),  p(5),  p(1));
+        dot(12, 5, '#b0a090'); dot(25, 24, '#6a6058'); dot(6, 24, '#6a6058');
+      }
+
+    } else if (t === T.TOWN_GATE) {
+      if (isHouse) {
+        houseExit();
+      } else {
+        // 街入口（変更なし）
+        grassBase();
+        ctx.fillStyle = '#8a8070';
+        ctx.fillRect(x + p(4),  y + p(11), p(24), p(17));
+        ctx.fillStyle = '#6a6058';
+        ctx.fillRect(x + p(4),  y + p(10), p(24), p(3));
+        ctx.fillRect(x + p(6),  y + p(8),  p(5),  p(5));
+        ctx.fillRect(x + p(21), y + p(8),  p(5),  p(5));
+        ctx.fillStyle = '#9e9080';
+        ctx.fillRect(x + p(7),  y + p(12), p(4),  p(4));
+        ctx.fillRect(x + p(21), y + p(12), p(4),  p(4));
+        ctx.fillStyle = '#2b1a0c';
+        ctx.fillRect(x + p(12), y + p(17), p(8),  p(11));
+        ctx.fillStyle = '#553311';
+        ctx.fillRect(x + p(12), y + p(17), p(7),  p(10));
+        ctx.fillStyle = '#7a4a20';
+        ctx.fillRect(x + p(12), y + p(17), p(3),  p(2));
+        ctx.fillStyle = '#2b1a0c';
+        ctx.fillRect(x + p(15), y + p(17), p(2),  p(11));
+        ctx.fillRect(x + p(18), y + p(24), p(2),  p(4));
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x + p(18), y + p(21), p(1),  p(2));
+      }
+
+    } else if (t === T.DUNGEON_GATE) {
+      // ダンジョン入口（変更なし）
+      grassBase();
+      ctx.fillStyle = '#4b4b52';
+      ctx.fillRect(x + p(5),  y + p(12), p(22), p(15));
+      ctx.fillStyle = '#33333a';
+      ctx.fillRect(x + p(8),  y + p(9),  p(16), p(8));
+      ctx.fillStyle = '#16161d';
+      ctx.fillRect(x + p(9),  y + p(14), p(14), p(14));
+      ctx.fillRect(x + p(11), y + p(11), p(10), p(5));
+      ctx.fillStyle = '#66666e';
+      ctx.fillRect(x + p(6),  y + p(13), p(5),  p(3));
+      ctx.fillRect(x + p(21), y + p(13), p(5),  p(3));
+      ctx.fillRect(x + p(7),  y + p(23), p(4),  p(2));
+      ctx.fillStyle = '#24242b';
+      ctx.fillRect(x + p(13), y + p(19), p(6),  p(9));
+      ctx.fillStyle = '#2a2438';
+      ctx.fillRect(x + p(11), y + p(15), p(10), p(3));
+      ctx.fillRect(x + p(14), y + p(20), p(4),  p(5));
+
+    } else if (t === T.CHEST) {
+      // 宝箱（床は dungeon/field で切り替え）
+      if (isDungeon) {
+        caveFloor();
+      } else {
+        ctx.fillStyle = '#8a8070'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+        ctx.fillStyle = '#6a6058';
+        ctx.fillRect(x, y, TILE_RENDER, p(1));
+        ctx.fillRect(x, y, p(1),  TILE_RENDER);
+      }
+      if (chestOpened) {
+        ctx.fillStyle = '#3a2418';
+        ctx.fillRect(x + p(8),  y + p(19), p(16), p(5));
+        ctx.fillStyle = '#1f120c';
+        ctx.fillRect(x + p(9),  y + p(23), p(14), p(3));
+      } else {
+        ctx.fillStyle = '#5c2f18';
+        ctx.fillRect(x + p(7),  y + p(13), p(18), p(12));
+        ctx.fillStyle = '#8b4a20';
+        ctx.fillRect(x + p(7),  y + p(13), p(17), p(11));
+        ctx.fillStyle = '#b86a28';
+        ctx.fillRect(x + p(8),  y + p(14), p(7),  p(2));
+        ctx.fillStyle = '#5c2f18';
+        ctx.fillRect(x + p(20), y + p(20), p(5),  p(5));
+        ctx.fillStyle = '#b86a28';
+        ctx.fillRect(x + p(8),  y + p(10), p(16), p(6));
+        ctx.fillStyle = '#d88a3a';
+        ctx.fillRect(x + p(9),  y + p(11), p(6),  p(2));
+        ctx.fillStyle = '#5c2f18';
+        ctx.fillRect(x + p(7),  y + p(17), p(18), p(2));
+        ctx.fillRect(x + p(7),  y + p(24), p(18), p(2));
+        ctx.fillStyle = '#e0b84a';
+        ctx.fillRect(x + p(15), y + p(17), p(3),  p(5));
+        ctx.fillRect(x + p(10), y + p(12), p(4),  p(2));
+      }
+
+    } else if (t === T.HOUSE) {
+      if (isHouse) {
+        houseFloor();
+        ctx.fillStyle = '#3a2418';
+        ctx.fillRect(x + p(3), y + p(9), p(26), p(14));
+        ctx.fillStyle = '#704820';
+        ctx.fillRect(x + p(4), y + p(8), p(24), p(12));
+        ctx.fillStyle = '#9a6a35';
+        ctx.fillRect(x + p(5), y + p(9), p(22), p(3));
+        ctx.fillStyle = '#2a1810';
+        ctx.fillRect(x + p(6), y + p(21), p(4), p(8));
+        ctx.fillRect(x + p(22), y + p(21), p(4), p(8));
+      } else {
+        // 2x2で1つの建物に見えるよう、周囲のHOUSEから役割を決める
+        const hasLeftHouse = col > 0 && currentMap[row][col - 1] === T.HOUSE;
+        const hasTopHouse = row > 0 && currentMap[row - 1][col] === T.HOUSE;
+        const part = hasTopHouse
+          ? (hasLeftHouse ? 'bottomRight' : 'bottomLeft')
+          : (hasLeftHouse ? 'topRight' : 'topLeft');
+        const isInnHouse = currentMap === townMap && col >= 5 && col <= 6 && row >= 5 && row <= 6;
+        const isShopHouse = currentMap === townMap && col >= 9 && col <= 10 && row >= 5 && row <= 6;
+
+        ctx.fillStyle = '#8a8070'; ctx.fillRect(x, y, TILE_RENDER, TILE_RENDER);
+
+        if (part === 'topLeft') {
+          ctx.fillStyle = '#661818';
+          ctx.fillRect(x + p(10), y + p(3),  p(22), p(5));
+          ctx.fillRect(x + p(4),  y + p(8),  p(28), p(9));
+          ctx.fillRect(x,         y + p(17), TILE_RENDER,  p(5));
+          ctx.fillStyle = '#992222';
+          ctx.fillRect(x + p(11), y + p(3),  p(21), p(4));
+          ctx.fillRect(x + p(5),  y + p(8),  p(27), p(7));
+          ctx.fillRect(x,         y + p(17), TILE_RENDER,  p(3));
+          ctx.fillStyle = '#c43a3a';
+          ctx.fillRect(x + p(12), y + p(4),  p(9),  p(1));
+          ctx.fillRect(x + p(6),  y + p(9),  p(10), p(2));
+          ctx.fillRect(x + p(1),  y + p(18), p(12), p(1));
+          ctx.fillStyle = '#4a1414';
+          ctx.fillRect(x,         y + p(22), TILE_RENDER,  p(3));
+          ctx.fillStyle = '#b8905a';
+          ctx.fillRect(x + p(2),  y + p(25), p(30), p(7));
+          ctx.fillStyle = '#d0ad78';
+          ctx.fillRect(x + p(4),  y + p(26), p(14), p(2));
+        } else if (part === 'topRight') {
+          ctx.fillStyle = '#661818';
+          ctx.fillRect(x,         y + p(3),  p(22), p(5));
+          ctx.fillRect(x,         y + p(8),  p(28), p(9));
+          ctx.fillRect(x,         y + p(17), TILE_RENDER,  p(5));
+          ctx.fillStyle = '#3f2318';
+          ctx.fillRect(x + p(20), y + p(1),  p(6),  p(9));
+          ctx.fillStyle = '#5a3520';
+          ctx.fillRect(x + p(21), y + p(1),  p(4),  p(7));
+          ctx.fillStyle = '#992222';
+          ctx.fillRect(x,         y + p(3),  p(20), p(4));
+          ctx.fillRect(x,         y + p(8),  p(27), p(7));
+          ctx.fillRect(x,         y + p(17), TILE_RENDER,  p(3));
+          ctx.fillStyle = '#c43a3a';
+          ctx.fillRect(x + p(3),  y + p(4),  p(9),  p(1));
+          ctx.fillRect(x + p(14), y + p(9),  p(10), p(2));
+          ctx.fillRect(x + p(17), y + p(18), p(12), p(1));
+          ctx.fillStyle = '#4a1414';
+          ctx.fillRect(x,         y + p(22), TILE_RENDER,  p(3));
+          ctx.fillStyle = '#b8905a';
+          ctx.fillRect(x,         y + p(25), p(30), p(7));
+          ctx.fillStyle = '#d0ad78';
+          ctx.fillRect(x + p(12), y + p(26), p(14), p(2));
+        } else if (part === 'bottomLeft') {
+          ctx.fillStyle = '#9f7f52';
+          ctx.fillRect(x + p(2),  y,         p(30), p(32));
+          ctx.fillStyle = '#c8a470';
+          ctx.fillRect(x + p(4),  y,         p(28), p(28));
+          ctx.fillStyle = '#e0c08a';
+          ctx.fillRect(x + p(5),  y + p(2),  p(13), p(3));
+          ctx.fillRect(x + p(5),  y + p(10), p(11), p(2));
+          ctx.fillStyle = '#8a6a40';
+          ctx.fillRect(x + p(2),  y,         p(3),  TILE_RENDER);
+          ctx.fillRect(x + p(2),  y + p(28), p(30), p(4));
+          ctx.fillStyle = '#6f4d2c';
+          ctx.fillRect(x + p(8),  y + p(11), p(10), p(9));
+          ctx.fillStyle = '#88ccff';
+          ctx.fillRect(x + p(9),  y + p(12), p(8),  p(7));
+          ctx.fillStyle = '#557799';
+          ctx.fillRect(x + p(9),  y + p(15), p(8),  p(1));
+          ctx.fillRect(x + p(13), y + p(12), p(1),  p(7));
+          ctx.fillStyle = '#5f4528';
+          ctx.fillRect(x + p(22), y + p(4),  p(3),  p(24));
+          if (isInnHouse) {
+            ctx.fillStyle = '#5a3520';
+            ctx.fillRect(x + p(19), y + p(9),  p(2),  p(16));
+            ctx.fillStyle = '#2b1a0c';
+            ctx.fillRect(x + p(8),  y + p(6),  p(15), p(10));
+            ctx.fillStyle = '#f0f4ff';
+            ctx.fillRect(x + p(9),  y + p(7),  p(13), p(8));
+            ctx.fillStyle = '#557799';
+            ctx.fillRect(x + p(11), y + p(10), p(9),  p(3));
+            ctx.fillStyle = '#cc5555';
+            ctx.fillRect(x + p(10), y + p(12), p(11), p(2));
+            ctx.fillStyle = '#e0b84a';
+            ctx.fillRect(x + p(10), y + p(8),  p(4),  p(3));
+          }
+          if (isShopHouse) {
+            ctx.fillStyle = '#5a3520';
+            ctx.fillRect(x + p(19), y + p(9),  p(2),  p(16));
+            ctx.fillStyle = '#2b1a0c';
+            ctx.fillRect(x + p(8),  y + p(6),  p(15), p(10));
+            ctx.fillStyle = '#e0b84a';
+            ctx.fillRect(x + p(9),  y + p(7),  p(13), p(8));
+            ctx.fillStyle = '#8b4a20';
+            ctx.fillRect(x + p(12), y + p(9),  p(3),  p(3));
+            ctx.fillRect(x + p(17), y + p(9),  p(3),  p(3));
+            ctx.fillStyle = '#553311';
+            ctx.fillRect(x + p(13), y + p(12), p(6),  p(2));
+          }
+        } else {
+          ctx.fillStyle = '#9f7f52';
+          ctx.fillRect(x,         y,         p(30), p(32));
+          ctx.fillStyle = '#c8a470';
+          ctx.fillRect(x,         y,         p(28), p(28));
+          ctx.fillStyle = '#e0c08a';
+          ctx.fillRect(x + p(12), y + p(2),  p(12), p(3));
+          ctx.fillRect(x + p(15), y + p(10), p(9),  p(2));
+          ctx.fillStyle = '#8a6a40';
+          ctx.fillRect(x + p(27), y,         p(3),  TILE_RENDER);
+          ctx.fillRect(x,         y + p(28), p(30), p(4));
+          ctx.fillStyle = '#553311';
+          ctx.fillRect(x + p(9),  y + p(8),  p(12), p(20));
+          ctx.fillStyle = '#704820';
+          ctx.fillRect(x + p(10), y + p(9),  p(10), p(19));
+          ctx.fillStyle = '#3b220f';
+          ctx.fillRect(x + p(14), y + p(9),  p(1),  p(19));
+          ctx.fillStyle = '#e0b84a';
+          ctx.fillRect(x + p(17), y + p(18), p(2),  p(2));
+          ctx.fillStyle = '#5f4528';
+          ctx.fillRect(x + p(4),  y + p(4),  p(3),  p(24));
+        }
+      }
+
+    } else {
+      // 草（GRASS） — ダンジョンでは暗い石床
+      if (isHouse) {
+        houseFloor();
+      } else if (isDungeon) {
+        caveFloor();
+      } else {
+        grassBase();
+      }
+    }
+
+    if (currentMap === dungeonMap && t === T.TREE && (col + row) % 7 === 0) {
+      drawTorch(x, y);
+    }
+  }
+
+  // ============================================================
+  // NPC ユーティリティ
+  // ============================================================
+  function getCurrentNpcs() {
+    if (currentMap === townMap) return NPCS;
+    if (currentHouseId === 'inn') return INN_NPCS;
+    if (currentHouseId === 'shop') return SHOP_NPCS;
+    return [];
+  }
+
+  function isShopAvailable() {
+    return currentHouseId === 'shop' && !!talkNpc && !!talkNpc.shop;
+  }
+
+  // 指定座標にいるNPCを返す（いなければ null）
+  function getNpcAt(x, y) {
+    return getCurrentNpcs().find(n => n.x === x && n.y === y) || null;
+  }
+
+  // プレイヤーの隣（上下左右）にいるNPCを返す（いなければ null）
+  function getAdjacentNpc() {
+    for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+      const n = getNpcAt(hero.x + dx, hero.y + dy);
+      if (n) return n;
+    }
+    return null;
+  }
+
+  // ============================================================
+  // 描画座標を hero.x/y にスナップ（マップ切り替え時・ロード時に使用）
+  // ============================================================
+  function snapDrawPos() {
+    hero.drawX = hero.x;
+    hero.drawY = hero.y;
+    moveAnim.active = false;
+  }
+
+  // ============================================================
+  // 移動補間を毎フレーム更新（loop() から呼び出す）
+  // ============================================================
+  function updateMove() {
+    if (!moveAnim.active) return;
+    moveAnim.progress = Math.min(1, moveAnim.progress + 1 / MOVE_FRAMES);
+    // easeInOut（滑らかな加減速）
+    const p = moveAnim.progress;
+    const t = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    hero.drawX = moveAnim.startX + (hero.x - moveAnim.startX) * t;
+    hero.drawY = moveAnim.startY + (hero.y - moveAnim.startY) * t;
+    if (moveAnim.progress >= 1) {
+      moveAnim.active = false;
+      hero.drawX = hero.x;
+      hero.drawY = hero.y;
+    }
+  }
+
+  // ============================================================
+  // マップ画面を描画する
+  // ============================================================
+  function renderMap() {
+    // ── カメラ計算（hero.drawX/drawY 追従、小数値のまま保持） ───────────
+    const camCol = Math.max(0, Math.min(COLS - VIEW_COLS, hero.drawX - VIEW_COLS / 2));
+    const camRow = Math.max(0, Math.min(ROWS - VIEW_ROWS, hero.drawY - VIEW_ROWS / 2));
+
+    // ── 可視タイルを描画（サブピクセルカメラ対応で +1 余分に描く） ──────
+    const c0 = Math.floor(camCol), r0 = Math.floor(camRow);
+    for (let r = r0; r < Math.min(r0 + VIEW_ROWS + 1, ROWS); r++)
+      for (let c = c0; c < Math.min(c0 + VIEW_COLS + 1, COLS); c++)
+        drawTile(c, r, camCol, camRow);
+
+    // ダンジョン暗闇オーバーレイ
+    if (currentMap === dungeonMap) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+
+    // ── NPC 描画（NPC_SC + NPC_OFF で中央下寄せ） ──────────────────────
+    const npcs = getCurrentNpcs();
+    if (npcs.length > 0) {
+      for (const npc of npcs) {
+        const npcSX = Math.round((npc.x - camCol) * TILE_RENDER);
+        const npcSY = Math.round((npc.y - camRow) * TILE_RENDER);
+        // カメラ範囲外はスキップ（描画領域外に大きくはみ出す場合）
+        if (npcSX < -TILE_RENDER || npcSX > VIEW_W || npcSY < -TILE_RENDER || npcSY > VIEW_H) continue;
+        drawNPC(npcSX + NPC_OFF.x, npcSY + NPC_OFF.y, NPC_SC, npc.bodyCol, npc.hairCol);
+        // 「！」バルーン（NPC の頭上に配置）
+        const bs = NPC_SC;
+        const bx = npcSX + NPC_OFF.x + Math.round(12 * bs);
+        const by = npcSY + NPC_OFF.y  - Math.round(8  * bs);
+        ctx.fillStyle = '#ffffcc';
+        ctx.fillRect(bx - 2 * bs, by - 2 * bs, 10 * bs, 11 * bs);
+        ctx.fillStyle = '#884400';
+        ctx.fillRect(bx,          by,           6 * bs, 4 * bs);
+        ctx.fillRect(bx,          by + 5 * bs,  6 * bs, 2 * bs);
+        ctx.fillRect(bx,          by + 8 * bs,  6 * bs, 2 * bs);
+      }
+    }
+
+    // ── ボス描画（BOSS_SC + BOSS_OFF で中央下寄せ） ────────────────────
+    if (currentMap === dungeonMap && !bossDefeated) {
+      const bx = BOSS_POS.x, by = BOSS_POS.y;
+      const bossSX = Math.round((bx - camCol) * TILE_RENDER);
+      const bossSY = Math.round((by - camRow) * TILE_RENDER);
+      if (bossSX > -TILE_RENDER && bossSX < VIEW_W && bossSY > -TILE_RENDER && bossSY < VIEW_H) {
+        drawDarkKnight(bossSX + BOSS_OFF.x, bossSY + BOSS_OFF.y, BOSS_SC);
+      }
+    }
+
+    // ── 主人公描画（hero.drawX/drawY で補間済み位置から描画） ───────────
+    const heroSX = Math.round((hero.drawX - camCol) * TILE_RENDER);
+    const heroSY = Math.round((hero.drawY - camRow) * TILE_RENDER);
+    drawHero(heroSX + HERO_OFF.x, heroSY + HERO_OFF.y, HERO_SC);
+  }
+
+  function renderEquipMenu() {
+    ctx.save();
+    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
+    const items = getEquipItems();
+    ctx.fillStyle = 'rgba(5, 5, 20, 0.88)';
+    ctx.fillRect(44, 38, 424, 308);
+    ctx.strokeStyle = '#5555aa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(44, 38, 424, 308);
+
+    txt('そうび', 64, 68, '#ffd700', 18);
+    txt('E / Esc: とじる   ↑↓: えらぶ   Enter: そうび', 64, 92, '#aaaacc', 12);
+
+    txt('武器', 74, 126, '#aaffaa', 14);
+    txt('防具', 286, 126, '#aaffaa', 14);
+
+    let index = 0;
+    const drawItem = (entry, x, y) => {
+      const selected = index === equipCursor;
+      const equipped = entry.type === 'weapon' ? hero.weapon === entry.id : hero.armor === entry.id;
+      if (selected) {
+        ctx.fillStyle = '#333366';
+        ctx.fillRect(x - 10, y - 15, 174, 20);
+      }
+      txt(`${selected ? '>' : ' '} ${entry.item.name}`, x, y, equipped ? '#ffd700' : '#ffffff', 13);
+      txt(equipped ? 'E' : ' ', x + 144, y, '#ffd700', 12);
+      index++;
+    };
+
+    let wy = 152;
+    for (const id of hero.weaponsOwned.filter(id => WEAPONS[id])) {
+      drawItem({ type: 'weapon', id, item: WEAPONS[id] }, 74, wy);
+      wy += 24;
+    }
+
+    let ay = 152;
+    for (const id of hero.armorsOwned.filter(id => ARMORS[id])) {
+      drawItem({ type: 'armor', id, item: ARMORS[id] }, 286, ay);
+      ay += 24;
+    }
+
+    txt(`攻撃 ${getHeroAttack()}  防御 ${getHeroDefense()}`, 64, 318, '#ffffff', 14);
+    ctx.restore();
+  }
+
+  // ============================================================
+  // バトル画面を描画する
+  // ============================================================
+  function drawBattleBackground(type) {
+    if (type === 'boss') {
+      // 不気味な洞窟奥
+      ctx.fillStyle = '#08070b';
+      ctx.fillRect(0, 0, 512, 384);
+      ctx.fillStyle = '#151018';
+      ctx.fillRect(0, 0, 512, 72);
+      ctx.fillStyle = '#211522';
+      ctx.fillRect(0, 42, 512, 32);
+      ctx.fillStyle = '#0d0a10';
+      ctx.fillRect(0, 74, 512, 96);
+      ctx.fillStyle = '#241428';
+      ctx.fillRect(34, 46, 60, 18);
+      ctx.fillRect(180, 24, 90, 22);
+      ctx.fillRect(358, 58, 80, 16);
+      ctx.fillStyle = '#3a1638';
+      ctx.fillRect(58, 102, 32, 4);
+      ctx.fillRect(256, 128, 46, 4);
+      ctx.fillRect(390, 94, 28, 4);
+      ctx.fillStyle = '#160d18';
+      ctx.fillRect(0, 170, 512, 86);
+      ctx.fillStyle = '#2a1828';
+      ctx.fillRect(0, 216, 512, 6);
+      ctx.fillRect(50, 236, 96, 6);
+      ctx.fillRect(318, 226, 120, 6);
+      ctx.fillStyle = '#05050c';
+      ctx.fillRect(0, 256, 512, 128);
+      ctx.fillStyle = 'rgba(120, 0, 80, 0.22)';
+      ctx.fillRect(144, 74, 224, 142);
+      return;
+    }
+
+    if (type === 'dungeon') {
+      // 暗い洞窟
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(0, 0, 512, 384);
+      ctx.fillStyle = '#24211f';
+      ctx.fillRect(0, 0, 512, 74);
+      ctx.fillStyle = '#181614';
+      ctx.fillRect(0, 74, 512, 96);
+      ctx.fillStyle = '#302c28';
+      ctx.fillRect(26, 24, 72, 20);
+      ctx.fillRect(158, 48, 92, 18);
+      ctx.fillRect(336, 30, 120, 24);
+      ctx.fillStyle = '#3b3530';
+      ctx.fillRect(48, 28, 28, 4);
+      ctx.fillRect(186, 52, 36, 4);
+      ctx.fillRect(374, 36, 44, 4);
+      ctx.fillStyle = '#1b1815';
+      ctx.fillRect(0, 170, 512, 86);
+      ctx.fillStyle = '#2b2620';
+      ctx.fillRect(0, 216, 512, 5);
+      ctx.fillRect(22, 236, 112, 5);
+      ctx.fillRect(214, 228, 82, 5);
+      ctx.fillRect(362, 244, 108, 5);
+      ctx.fillStyle = '#050510';
+      ctx.fillRect(0, 256, 512, 128);
+      return;
+    }
+
+    // 草原
+    ctx.fillStyle = '#78b7e8';
+    ctx.fillRect(0, 0, 512, 104);
+    ctx.fillStyle = '#b9e6ff';
+    ctx.fillRect(0, 104, 512, 46);
+    ctx.fillStyle = '#eef7ff';
+    ctx.fillRect(62, 44, 56, 12);
+    ctx.fillRect(92, 34, 64, 14);
+    ctx.fillRect(300, 58, 84, 14);
+    ctx.fillRect(344, 48, 58, 12);
+    ctx.fillStyle = '#4f963f';
+    ctx.fillRect(0, 150, 512, 106);
+    ctx.fillStyle = '#39722f';
+    ctx.fillRect(0, 216, 512, 5);
+    ctx.fillRect(32, 236, 80, 4);
+    ctx.fillRect(172, 228, 96, 4);
+    ctx.fillRect(354, 246, 104, 4);
+    ctx.fillStyle = '#69b85a';
+    ctx.fillRect(28, 180, 18, 3);
+    ctx.fillRect(138, 198, 24, 3);
+    ctx.fillRect(250, 232, 20, 3);
+    ctx.fillRect(420, 188, 26, 3);
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 256, 512, 128);
+  }
+
+  function renderBattle() {
+    ctx.save();
+    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
+    drawBattleBackground(battleBgType);
+
+    // 敵（左側・大きく表示）
+    if (foe && foe.hp > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(84, 220, foe.boss ? 92 : 76, 8);
+      drawEnemy(foe, 80, 130, 3);
+      txt(foe.name, 82, 128, '#aaffaa', 16);
+      txt('HP', 82, 114, '#ff6666', 12);
+      drawBar(102, 104, 130, foe.hp, foe.maxHp, '#dd3333');
+      txt(`${foe.hp}/${foe.maxHp}`, 104, 114, '#fff', 11);
+    }
+
+    // 主人公（右側・大きく表示）
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.fillRect(350, 218, 70, 7);
+    drawHero(340, 140, 2.5, 'down');
+
+    // メッセージウィンドウ
+    ctx.fillStyle = 'rgba(5,5,20,0.92)';
+    ctx.fillRect(8, 256, 496, 52);
+    ctx.strokeStyle = '#5555aa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 256, 496, 52);
+    txt(msg, 18, 282, '#ffffff', 14);
+
+    // プレイヤーステータス（左下）
+    ctx.fillStyle = 'rgba(5,5,20,0.92)';
+    ctx.fillRect(8, 314, 224, 64);
+    ctx.strokeStyle = '#5555aa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 314, 224, 64);
+    txt(`Lv.${hero.level}  ゆうしゃ`, 16, 330, '#ffd700', 13);
+    txt('HP', 16, 348, '#ff6666', 12);
+    drawBar(38, 337, 174, hero.hp, hero.maxHp, '#dd3333');
+    txt(`${hero.hp}/${hero.maxHp}`, 40, 348, '#fff', 11);
+    txt('MP', 16, 368, '#6699ff', 12);
+    drawBar(38, 357, 174, hero.mp, hero.maxMp, '#3366cc');
+    txt(`${hero.mp}/${hero.maxMp}`, 40, 368, '#fff', 11);
+    ctx.restore();
+  }
+
+  // ============================================================
+  // 勝利画面を描画する
+  // ============================================================
+  function renderWin() {
+    ctx.save();
+    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
+    ctx.fillStyle = '#050520';
+    ctx.fillRect(0, 0, 512, 384);
+
+    // きらきらエフェクト（時間で動く星）
+    const t = Date.now() / 700;
+    ctx.fillStyle = '#ffd700';
+    for (let i = 0; i < 28; i++) {
+      const sx = ((Math.sin(i * 2.4 + t) * 0.5 + 0.5) * 512) | 0;
+      const sy = ((Math.cos(i * 1.9 + t * 0.7) * 0.5 + 0.5) * 384) | 0;
+      ctx.fillRect(sx, sy, 3, 3);
+    }
+
+    txt('★  Victory!  ★', 118, 130, '#ffd700', 36);
+    txt('てきを  たおした！', 148, 190, '#ffffff', 20);
+    txt(winMsg, 162, 228, '#aaffaa', 16);
+    txt('なにかキーを押してマップへ', 130, 292, '#8888ff', 15);
+
+    drawHero(120, 300, 2);
+    if (foe) drawEnemy(foe, 340, 300, 2);
+    ctx.restore();
+  }
+
+  // ============================================================
+  // ゲームオーバー画面を描画する
+  // ============================================================
+  function renderLose() {
+    ctx.save();
+    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
+    ctx.fillStyle = '#150000';
+    ctx.fillRect(0, 0, 512, 384);
+    txt('GAME  OVER', 128, 182, '#ff2222', 42);
+    txt('ちからつきた…', 172, 248, '#cccccc', 20);
+    txt('なにかキーを押してやりなおす', 112, 314, '#888888', 15);
+    ctx.restore();
+  }
+
+  // ============================================================
+  // メインループ（毎フレーム呼ばれる）
+  // ============================================================
+  // ============================================================
+  // HTML ステータスバーを更新する
+  // ============================================================
+  function updateStatusBar() {
+    document.getElementById('statusName').textContent = `Lv.${hero.level}  ゆうしゃ  ${getCurrentWeapon().name}  ${getCurrentArmor().name}  EXP ${hero.exp}  G ${hero.gold}`;
+
+    // HP バー
+    const hpRatio = hero.hp / hero.maxHp;
+    const hpFill  = document.getElementById('hpBarFill');
+    hpFill.style.width      = `${Math.round(hpRatio * 100)}%`;
+    hpFill.style.background = hpRatio > 0.5 ? '#44dd44' : hpRatio > 0.25 ? '#dddd44' : '#dd3333';
+    document.getElementById('hpText').textContent = `${hero.hp}/${hero.maxHp}`;
+
+    // MP バー
+    const mpFill = document.getElementById('mpBarFill');
+    mpFill.style.width = `${Math.round(hero.mp / hero.maxMp * 100)}%`;
+    document.getElementById('mpText').textContent = `${hero.mp}/${hero.maxMp}`;
+
+    // 現在地（街にいるときだけ表示）
+    const curTile = currentMap[hero.y] && currentMap[hero.y][hero.x];
+    const inTown  = currentMap === townMap || curTile === T.STONE || curTile === T.HOUSE;
+    document.getElementById('locationLabel').textContent = currentMap === dungeonMap ? '◆ くらやみの洞窟' : inTown ? '★ ヒカリのまち' : '';
+  }
+
+  function loop() {
+    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+    updateMove();
+    updateStatusBar();
+    // TALK 状態はマップを下地として描いたうえで会話ウィンドウを重ねる
+    if (state === S.MAP  || state === S.TALK || state === S.EQUIP) renderMap();
+    if (state === S.TALK)   renderTalkWindow();
+    if (state === S.EQUIP)  renderEquipMenu();
+    if (state === S.BATTLE) renderBattle();
+    if (state === S.WIN)    renderWin();
+    if (state === S.LOSE)   renderLose();
+    requestAnimationFrame(loop); // 次のフレームへ
+  }
+
+  // ============================================================
+  // バトルボタンの表示・非表示
+  // ============================================================
+  function showBtns() {
+    btnArea.innerHTML = `
+      <button class="btn" onclick="doAtk()">⚔ こうげき</button>
+      <button class="btn" onclick="doMagic()">✨ ファイア (MP2)</button>
+      <button class="btn" onclick="doPotion()">ポーション</button>
+      <button class="btn" onclick="doRun()">💨 にげる</button>
+    `;
+  }
+  function hideBtns() {
+    btnArea.innerHTML = '';
+  }
+
+  function showShopBtns() {
+    btnArea.innerHTML = `
+      <button class="btn" onclick="buyPotion()">ポーション 10G</button>
+      <button class="btn" onclick="buySteelSword()">鋼の剣 30G</button>
+      <button class="btn" onclick="buyIronArmor()">鉄のよろい 40G</button>
+      <button class="btn" onclick="advanceDialogue()">とじる</button>
+    `;
+  }
+
+  function buyPotion() {
+    if (state !== S.TALK || !isShopAvailable()) return;
+    if (hero.gold < 10) {
+      shopMsg = 'ゴールドが足りない！';
+      return;
+    }
+    hero.gold -= 10;
+    hero.potions++;
+    shopMsg = `ポーションを買った！ 所持数 ${hero.potions}`;
+  }
+
+  function buySteelSword() {
+    if (state !== S.TALK || !isShopAvailable()) return;
+    if (hero.weaponsOwned.includes('steelSword')) {
+      shopMsg = '鋼の剣は　もう持っている！';
+      return;
+    }
+    if (hero.gold < 30) {
+      shopMsg = 'ゴールドが足りない！';
+      return;
+    }
+    hero.gold -= 30;
+    hero.weaponsOwned.push('steelSword');
+    shopMsg = '鋼の剣を買った！';
+  }
+
+  function buyIronArmor() {
+    if (state !== S.TALK || !isShopAvailable()) return;
+    if (hero.armorsOwned.includes('ironArmor')) {
+      shopMsg = '鉄のよろいは　もう持っている！';
+      return;
+    }
+    if (hero.gold < 40) {
+      shopMsg = 'ゴールドが足りない！';
+      return;
+    }
+    hero.gold -= 40;
+    hero.armorsOwned.push('ironArmor');
+    shopMsg = '鉄のよろいを買った！';
+  }
+
+  // ============================================================
+  // 会話（トーク）システム
+  // ============================================================
+
+  // 会話を開始する
+  function openDialogue(npc) {
+    if (currentHouseId === 'inn' && npc.inn) {
+      hero.hp = hero.maxHp;
+      hero.mp = hero.maxMp;
+    }
+    if (currentHouseId === 'shop' && npc.shop) shopMsg = '';
+    if (npc.quest) questRewardMsg = '';
+    talkNpc  = npc;
+    talkPage = 0;
+    state    = S.TALK;
+    hideBtns();
+    if (currentHouseId === 'shop' && npc.shop) showShopBtns();
+  }
+
+  // セリフを1ページ進める（最終ページなら会話終了）
+  function advanceDialogue() {
+    if (!talkNpc) return;
+    talkPage++;
+    const lineCount = talkNpc.afterBossLines && bossDefeated ? talkNpc.afterBossLines.length : (talkNpc.inn || talkNpc.quest) ? 1 : talkNpc.lines.length;
+    if (talkPage >= lineCount) {
+      talkNpc  = null;
+      talkPage = 0;
+      state    = S.MAP;
+      hideBtns();
+    }
+  }
+
+  // 会話ウィンドウをマップの上に重ねて描画する
+  function renderTalkWindow() {
+    if (!talkNpc) return;
+    ctx.save();
+    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
+
+    // 半透明の背景ボックス
+    ctx.fillStyle = 'rgba(4,4,28,0.95)';
+    ctx.fillRect(8, 246, 496, 130);
+    ctx.strokeStyle = '#8888cc';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 246, 496, 130);
+
+    // NPC スプライト（小さく左端に表示）
+    drawNPC(16, 254, 1, talkNpc.bodyCol, talkNpc.hairCol);
+
+    // NPC 名前
+    txt(talkNpc.name, 60, 272, '#ffd700', 14);
+
+    let talkLines = talkNpc.lines;
+    if (talkNpc.afterBossLines && bossDefeated) {
+      talkLines = talkNpc.afterBossLines;
+    } else if (isShopAvailable()) {
+      talkLines = [shopMsg || 'ポーションは10G、鋼の剣は30G、鉄のよろいは40Gです'];
+    } else if (talkNpc.inn) {
+      talkLines = ['HPとMPが回復した！'];
+    } else if (talkNpc.quest) {
+      if (slimeKills >= 3) {
+        if (!questDone) {
+          const leveled = gainExp(5);
+          questDone = true;
+          questRewardMsg = leveled ? 'ありがとう！ 経験値を5獲得した！ レベルアップ！' : 'ありがとう！ 経験値を5獲得した！';
+          talkLines = [questRewardMsg];
+        } else if (questRewardMsg) {
+          talkLines = [questRewardMsg];
+        } else {
+          talkLines = ['ありがとう！'];
+        }
+      } else {
+        talkLines = ['スライムを3匹倒してきて'];
+      }
+    }
+
+    // ページ番号
+    txt(`${talkPage + 1}/${talkLines.length}`, 466, 272, '#666688', 11);
+
+    // 区切り線
+    ctx.fillStyle = '#4444aa';
+    ctx.fillRect(60, 276, 430, 1);
+
+    // セリフ（現在ページ）
+    txt(talkLines[talkPage], 60, 306, '#ffffff', 14);
+
+    // ページ送りプロンプト（点滅）
+    if (Math.floor(Date.now() / 450) % 2) {
+      const isLast = talkPage >= talkLines.length - 1;
+      txt(isLast ? '[ とじる ]' : '[ つぎへ  ]', 376, 368, '#88aaff', 12);
+    }
+    ctx.restore();
+  }
+
+  // ============================================================
+  // バトル開始
+  // ============================================================
+  function chooseEnemy() {
+    const enemies = currentMap === dungeonMap ? [BAT_BASE, GOBLIN_BASE] : [SLIME_BASE, BAT_BASE];
+    return { ...enemies[rng(0, enemies.length - 1)] };
+  }
+
+  function startBattle() {
+    battleBgType = currentMap === dungeonMap ? 'dungeon' : 'field';
+    foe      = chooseEnemy(); // マップに応じて敵を生成
+    state    = S.BATTLE;
+    heroTurn = true;
+    msg      = `${foe.name} が　あらわれた！`;
+    hideBtns();
+    setTimeout(showBtns, 700); // 少し間を置いてからボタン表示
+  }
+
+  function startBossBattle() {
+    if (bossDefeated) return;
+    battleBgType = 'boss';
+    foe      = { ...DARK_KNIGHT_BASE };
+    state    = S.BATTLE;
+    heroTurn = true;
+    msg      = `${foe.name} が　立ちはだかった！`;
+    hideBtns();
+    setTimeout(showBtns, 700);
+  }
+
+  // ============================================================
+  // プレイヤーの行動：こうげき
+  // ============================================================
+  function doAtk() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    hideBtns();
+    const dmg = Math.max(1, getHeroAttack() - foe.def + rng(-1, 3));
+    foe.hp    = Math.max(0, foe.hp - dmg);
+    msg       = `ゆうしゃの　こうげき！　${dmg} のダメージ！`;
+    afterHeroAction();
+  }
+
+  // ============================================================
+  // プレイヤーの行動：ファイア（まほう）
+  // ============================================================
+  function doMagic() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    if (hero.mp < 2) {
+      msg = 'MPが　たりない！';
+      return;
+    }
+    hideBtns();
+    hero.mp -= 2;
+    const dmg = Math.max(1, getHeroAttack() * 2 - foe.def + rng(0, 5));
+    foe.hp    = Math.max(0, foe.hp - dmg);
+    msg       = `ファイア！　${dmg} のダメージ！`;
+    afterHeroAction();
+  }
+
+  // ============================================================
+  // プレイヤーの行動：ポーション
+  // ============================================================
+  function doPotion() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    if (hero.potions <= 0) {
+      msg = 'ポーションを持っていない！';
+      return;
+    }
+    hideBtns();
+    hero.potions--;
+    const beforeHp = hero.hp;
+    hero.hp = Math.min(hero.maxHp, hero.hp + 15);
+    msg = `ポーションを使った！ HPが ${hero.hp - beforeHp} 回復した！`;
+    heroTurn = false;
+    setTimeout(enemyTurn, 1300);
+  }
+
+  // ============================================================
+  // プレイヤーの行動：にげる
+  // ============================================================
+  function doRun() {
+    if (!heroTurn || state !== S.BATTLE) return;
+    if (foe && foe.boss) {
+      msg = 'ダークナイトからは　にげられない！';
+      return;
+    }
+    hideBtns();
+    if (Math.random() < 0.6) {
+      msg = 'うまく　にげきった！';
+      setTimeout(() => { state = S.MAP; }, 1000);
+    } else {
+      msg      = 'にげられなかった！';
+      heroTurn = false;
+      setTimeout(enemyTurn, 1300);
+    }
+  }
+
+  // ============================================================
+  // プレイヤー行動後の処理（敵が生きているか確認）
+  // ============================================================
+  function afterHeroAction() {
+    if (foe.hp <= 0) {
+      // 勝利！
+      setTimeout(() => {
+        if (foe.name === 'スライム') slimeKills++;
+        const leveled = gainExp(foe.exp);
+        hero.gold += foe.gold || 0;
+        if (foe.boss) {
+          bossDefeated = true;
+          winMsg = leveled ? 'ダークナイトを倒した！ レベルアップ！' : 'ダークナイトを倒した！';
+        } else {
+          winMsg = leveled ? `${foe.exp} けいけんちと ${foe.gold || 0}Gを　えた！ レベルアップ！` : `${foe.exp} けいけんちと ${foe.gold || 0}Gを　えた！`;
+        }
+        state    = S.WIN;
+      }, 900);
+    } else {
+      // 敵のターンへ
+      heroTurn = false;
+      setTimeout(enemyTurn, 1300);
+    }
+  }
+
+  // ============================================================
+  // 敵のターン（自動で攻撃してくる）
+  // ============================================================
+  function enemyTurn() {
+    if (state !== S.BATTLE) return;
+    const dmg = Math.max(1, foe.atk - getHeroDefense() + rng(-1, 3));
+    hero.hp   = Math.max(0, hero.hp - dmg);
+    msg       = `${foe.name}の　こうげき！　${dmg} のダメージ！`;
+    if (hero.hp <= 0) {
+      // ゲームオーバー
+      setTimeout(() => { state = S.LOSE; }, 1000);
+    } else {
+      // プレイヤーのターンへ戻る
+      heroTurn = true;
+      setTimeout(() => {
+        msg = 'どうする？';
+        showBtns();
+      }, 1300);
+    }
+  }
+
+  // ============================================================
+  // プレイヤーの移動
+  // ============================================================
+  function isFieldTownEntrance(x, y) {
+    return currentMap === fieldMap && x === 10 && y === 2;
+  }
+
+  function isTownExit(x, y) {
+    return currentMap === townMap && x === 7 && y === 10;
+  }
+
+  function isFieldDungeonEntrance(x, y) {
+    return currentMap === fieldMap && x === 13 && y === 10;
+  }
+
+  function isDungeonExit(x, y) {
+    return currentMap === dungeonMap && x === 7 && y === 11;
+  }
+
+  function isHouseMap(map) {
+    return Object.values(houseMaps).includes(map);
+  }
+
+  function getHouseIdAt(x, y) {
+    return HOUSE_ENTRANCES[`${x},${y}`] || null;
+  }
+
+  function isHouseExit(x, y) {
+    return isHouseMap(currentMap) && x === 7 && y === 10;
+  }
+
+  function switchMapIfNeeded() {
+    if (isFieldTownEntrance(hero.x, hero.y)) {
+      townReturn = { x: 9, y: 2 };
+      currentMap = townMap;
+      hero.x = 7;
+      hero.y = 9;
+      return true;
+    }
+    if (isFieldDungeonEntrance(hero.x, hero.y)) {
+      dungeonReturn = { x: 13, y: 10 };
+      currentMap = dungeonMap;
+      hero.x = 7;
+      hero.y = 10;
+      return true;
+    }
+    if (isTownExit(hero.x, hero.y)) {
+      currentMap = fieldMap;
+      hero.x = townReturn.x;
+      hero.y = townReturn.y;
+      return true;
+    }
+    if (isDungeonExit(hero.x, hero.y)) {
+      currentMap = fieldMap;
+      hero.x = dungeonReturn.x;
+      hero.y = dungeonReturn.y;
+      return true;
+    }
+    if (isHouseExit(hero.x, hero.y)) {
+      currentMap = townMap;
+      hero.x = houseReturn.x;
+      hero.y = houseReturn.y;
+      currentHouseId = null;
+      return true;
+    }
+    return false;
+  }
+
+  function checkTreasureEvent() {
+    if (currentMap !== dungeonMap || currentMap[hero.y][hero.x] !== T.CHEST || chestOpened) return;
+    chestOpened = true;
+    if (!hero.weaponsOwned.includes('ironSword')) hero.weaponsOwned.push('ironSword');
+    showNotice('鉄の剣を手に入れた！ Eキーで装備できます');
+  }
+
+  function isBossAt(x, y) {
+    return currentMap === dungeonMap && !bossDefeated && x === BOSS_POS.x && y === BOSS_POS.y;
+  }
+
+  function getAdjacentBoss() {
+    for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+      if (isBossAt(hero.x + dx, hero.y + dy)) return true;
+    }
+    return false;
+  }
+
+  function move(dx, dy) {
+    if (moveAnim.active || state !== S.MAP) return; // 移動中・マップ以外は動かない
+    if (dy < 0) hero.dir = 'up';
+    if (dy > 0) hero.dir = 'down';
+    if (dx < 0) hero.dir = 'left';
+    if (dx > 0) hero.dir = 'right';
+
+    const nx = hero.x + dx;
+    const ny = hero.y + dy;
+
+    // マップの端を超えないようにする
+    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
+
+    // 移動先にNPCがいれば、移動せずに話しかける
+    const npc = getNpcAt(nx, ny);
+    if (npc) {
+      openDialogue(npc);
+      return;
+    }
+    if (isBossAt(nx, ny)) {
+      startBossBattle();
+      return;
+    }
+
+    // 木・水・建物は通れない
+    const tile = currentMap[ny][nx];
+    const houseId = currentMap === townMap && tile === T.HOUSE ? getHouseIdAt(nx, ny) : null;
+    if (houseId && houseMaps[houseId]) {
+      houseReturn = { x: hero.x, y: hero.y };
+      currentHouseId = houseId;
+      currentMap = houseMaps[houseId];
+      hero.x = 7;
+      hero.y = 9;
+      snapDrawPos(); // マップ切り替えはアニメなしでスナップ
+      return;
+    }
+    if (tile === T.TREE || tile === T.WATER || tile === T.HOUSE) return;
+
+    const oldX = hero.x, oldY = hero.y;
+    hero.x = nx;
+    hero.y = ny;
+    const switchedMap = switchMapIfNeeded();
+    checkTreasureEvent();
+
+    if (switchedMap) {
+      snapDrawPos(); // マップ切り替えはアニメなしでスナップ
+    } else {
+      // 移動補間アニメーション開始
+      moveAnim.active   = true;
+      moveAnim.startX   = oldX;
+      moveAnim.startY   = oldY;
+      moveAnim.progress = 0;
+    }
+
+    // ランダムエンカウント判定（草・花タイルのみ。石畳の街ではエンカウントなし）
+    if (!switchedMap && currentMap === fieldMap && (tile === T.GRASS || tile === T.FLOWER) && Math.random() < ENC_RATE) {
+      setTimeout(startBattle, 80);
+    }
+    if (!switchedMap && currentMap === dungeonMap && tile === T.STONE && Math.random() < ENC_RATE) {
+      setTimeout(startBattle, 80);
+    }
+  }
+
+  function showNotice(text) {
+    const notification = document.getElementById('notification');
+    notification.textContent = text;
+    setTimeout(() => {
+      if (notification.textContent === text) notification.textContent = '';
+    }, 1800);
+  }
+
+  function saveGame() {
+    const data = {
+      hero: {
+        x: hero.x, y: hero.y,
+        hp: hero.hp, maxHp: hero.maxHp,
+        mp: hero.mp, maxMp: hero.maxMp,
+        atk: hero.atk, def: hero.def,
+        weapon: hero.weapon,
+        armor: hero.armor,
+        weaponsOwned: hero.weaponsOwned,
+        armorsOwned: hero.armorsOwned,
+        level: hero.level, exp: hero.exp,
+        gold: hero.gold, potions: hero.potions,
+        dir: hero.dir,
+      },
+      quest: {
+        slimeKills,
+        questDone,
+        questRewardMsg,
+      },
+      chestOpened,
+      bossDefeated,
+      returns: {
+        town: townReturn,
+        dungeon: dungeonReturn,
+        house: houseReturn,
+      },
+      houseId: currentHouseId,
+      map: currentMap === townMap ? 'town' : currentMap === dungeonMap ? 'dungeon' : isHouseMap(currentMap) ? 'house' : 'field',
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    showNotice('セーブしました');
+  }
+
+  function loadGame() {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      showNotice('セーブデータがありません');
+      return;
+    }
+    try {
+      const data = JSON.parse(raw);
+      if (data.hero) Object.assign(hero, data.hero);
+      if (!WEAPONS[hero.weapon]) hero.weapon = 'woodSword';
+      if (!ARMORS[hero.armor]) hero.armor = 'travelerClothes';
+      hero.weaponsOwned = Array.isArray(hero.weaponsOwned) ? hero.weaponsOwned.filter(id => WEAPONS[id]) : ['woodSword'];
+      hero.armorsOwned = Array.isArray(hero.armorsOwned) ? hero.armorsOwned.filter(id => ARMORS[id]) : ['travelerClothes'];
+      if (!hero.weaponsOwned.includes('woodSword')) hero.weaponsOwned.unshift('woodSword');
+      if (!hero.armorsOwned.includes('travelerClothes')) hero.armorsOwned.unshift('travelerClothes');
+      if (!hero.weaponsOwned.includes(hero.weapon)) hero.weaponsOwned.push(hero.weapon);
+      if (!hero.armorsOwned.includes(hero.armor)) hero.armorsOwned.push(hero.armor);
+      hero.dir = hero.dir || 'down';
+      if (data.quest) {
+        slimeKills = data.quest.slimeKills || 0;
+        questDone = !!data.quest.questDone;
+        questRewardMsg = data.quest.questRewardMsg || '';
+      }
+      chestOpened = !!data.chestOpened;
+      bossDefeated = !!data.bossDefeated;
+      if (data.returns) {
+        townReturn = data.returns.town || townReturn;
+        dungeonReturn = data.returns.dungeon || dungeonReturn;
+        houseReturn = data.returns.house || houseReturn;
+      } else if (data.fieldReturn) {
+        townReturn = data.fieldReturn;
+        dungeonReturn = data.fieldReturn;
+      }
+      currentHouseId = data.houseId && houseMaps[data.houseId] ? data.houseId : null;
+      if (data.map === 'house' && !currentHouseId) currentHouseId = 'west';
+      currentMap = data.map === 'town' ? townMap : data.map === 'dungeon' ? dungeonMap : data.map === 'house' ? houseMaps[currentHouseId] : fieldMap;
+      state = S.MAP;
+      foe = null;
+      talkNpc = null;
+      talkPage = 0;
+      equipCursor = 0;
+      snapDrawPos();
+      hideBtns();
+      showNotice('ロードしました');
+    } catch (e) {
+      showNotice('ロードに失敗しました');
+    }
+  }
+
+  // ============================================================
+  // キーボード入力
+  // ============================================================
+  document.addEventListener('keydown', e => {
+    if (e.shiftKey && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      saveGame();
+      return;
+    }
+    if (e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+      e.preventDefault();
+      loadGame();
+      return;
+    }
+    if (state === S.MAP) {
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        equipCursor = 0;
+        state = S.EQUIP;
+        return;
+      }
+      if (e.key === 'ArrowUp'    || e.key === 'w') move(0, -1);
+      if (e.key === 'ArrowDown'  || e.key === 's') move(0,  1);
+      if (e.key === 'ArrowLeft'  || e.key === 'a') move(-1, 0);
+      if (e.key === 'ArrowRight' || e.key === 'd') move( 1, 0);
+      // Space・Enter・Z で隣接NPCに話しかける
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        const adj = getAdjacentNpc();
+        if (adj) {
+          openDialogue(adj);
+        } else if (getAdjacentBoss()) {
+          startBossBattle();
+        }
+      }
+    } else if (state === S.EQUIP) {
+      const items = getEquipItems();
+      if (e.key === 'Escape' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        state = S.MAP;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        equipCursor = items.length ? (equipCursor + items.length - 1) % items.length : 0;
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        equipCursor = items.length ? (equipCursor + 1) % items.length : 0;
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const entry = items[equipCursor];
+        if (entry) {
+          if (entry.type === 'weapon') hero.weapon = entry.id;
+          if (entry.type === 'armor') hero.armor = entry.id;
+          updateStatusBar();
+        }
+        return;
+      }
+    } else if (state === S.TALK) {
+      // Space・Enter・Z・Escape でセリフを進める／会話を閉じる
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'Z'
+          || e.key === 'Escape') {
+        e.preventDefault();
+        advanceDialogue();
+      }
+    } else if (state === S.WIN) {
+      backToMap();
+    } else if (state === S.LOSE) {
+      resetGame();
+    }
+  });
+
+  // キャンバスをクリックしても勝利・ゲームオーバー画面を進められる
+  canvas.addEventListener('click', () => {
+    if (state === S.TALK) advanceDialogue();
+    if (state === S.WIN)  backToMap();
+    if (state === S.LOSE) resetGame();
+  });
+
+  // マップへ戻る
+  function backToMap() {
+    state = S.MAP;
+    foe   = null;
+    hideBtns();
+  }
+
+  // ゲームをリセット（最初から）
+  function resetGame() {
+    hero.hp = hero.maxHp;
+    hero.mp = hero.maxMp;
+    hero.x  = 1;
+    hero.y  = 1;
+    hero.dir = 'down';
+    snapDrawPos();
+    hero.gold = 0;
+    hero.potions = 0;
+    chestOpened = false;
+    bossDefeated = false;
+    townReturn = { x: 9, y: 2 };
+    dungeonReturn = { x: 13, y: 10 };
+    houseReturn = { x: 7, y: 4 };
+    currentHouseId = null;
+    currentMap = fieldMap;
+    state   = S.MAP;
+    foe     = null;
+    hideBtns();
+  }
+
+  // ============================================================
+  // ゲーム開始！
+  // ============================================================
+  loadTileImages();   // tiles/ フォルダの画像を非同期ロード開始
+  loadSpriteImages(); // sprites/ フォルダの画像を非同期ロード開始
+  loop();             // ロード完了を待たずに開始（ロード前は fillRect で描画）
+  </script>
+</body>
+</html>

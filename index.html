@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>AI RPG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+    }
+    h1 {
+      color: #ffd700;
+      font-size: 22px;
+      margin-bottom: 8px;
+      letter-spacing: 4px;
+    }
+    #gamePanel {
+      border: 3px solid #444466;
+      display: flex;
+      flex-direction: column;
+    }
+    #statusBar {
+      background: #12122a;
+      border-bottom: 1px solid #333355;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+    }
+    #statusName  { color: #ffd700; font-size: 13px; white-space: nowrap; }
+    .statGroup   { display: flex; align-items: center; gap: 6px; }
+    .statLabel   { font-size: 12px; width: 20px; }
+    .statLabel.hp { color: #ff6666; }
+    .statLabel.mp { color: #6699ff; }
+    .barBg       { background: #111; width: 110px; height: 10px; border: 1px solid #555; }
+    .barFill     { height: 100%; background: #dd3333; }
+    .barFill.mp  { background: #3366cc; }
+    #hpText, #mpText { font-size: 11px; color: #ccc; min-width: 44px; }
+    #locationLabel { color: #ffd700; font-size: 12px; margin-left: auto; white-space: nowrap; }
+    canvas { display: block; }
+    #btnArea {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      min-height: 44px;
+    }
+    #btnArea.noPointer {
+      pointer-events: none;
+    }
+    .btn {
+      background: #1a1a3a;
+      color: #ffffff;
+      border: 2px solid #5555aa;
+      padding: 8px 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+    }
+    .btn.selected { background: #333366; border-color: #ffd700; color: #ffffaa; }
+    .shopRow {
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+      color: #ddd;
+      white-space: nowrap;
+    }
+    .shopRow.selected {
+      color: #ffd700;
+      border-color: #ffd700;
+      background: #222244;
+    }
+    #notification {
+      min-height: 24px;
+      margin-top: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      color: #aaffaa;
+      text-align: center;
+      letter-spacing: 1px;
+      text-shadow: 0 0 10px #44ff88;
+    }
+    #hint { margin-top: 4px; color: #666688; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>⚔ AI RPG ⚔</h1>
+  <div id="gamePanel">
+    <div id="statusBar">
+      <span id="statusName">Lv.1  ゆうしゃ  EXP 0  G 0</span>
+      <div class="statGroup">
+        <span class="statLabel hp">HP</span>
+        <div class="barBg"><div id="hpBarFill" class="barFill"></div></div>
+        <span id="hpText">30/30</span>
+      </div>
+      <div class="statGroup">
+        <span class="statLabel mp">MP</span>
+        <div class="barBg"><div id="mpBarFill" class="barFill mp"></div></div>
+        <span id="mpText">12/12</span>
+      </div>
+      <span id="locationLabel"></span>
+    </div>
+    <canvas id="c" width="1024" height="768"></canvas>
+  </div>
+  <div id="btnArea"></div>
+  <div id="notification"></div>
+  <div id="hint">移動：← → ↑ ↓ / W A S D　　話しかける：Space・Enter・Z　　メニュー：E 　Shift+S:セーブ / Shift+L:ロード　　</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
