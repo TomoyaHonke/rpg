@@ -342,6 +342,37 @@ import {
   HERO_WALK_FRAMES,
 } from './data/heroFrames.js';
 
+import {
+  createInitialFlags,
+} from './data/flags.js';
+
+import {
+  createInitialPrologueState,
+  createInitialBattleIntro,
+  createInitialBattleVictory,
+  createInitialKeys,
+} from './data/initialState.js';
+
+import {
+  getHeroSpriteInfo as getHeroSpriteInfoUI,
+  drawHeroAtFoot as drawHeroAtFootUI,
+} from './ui/heroUI.js';
+
+import {
+  setHeroDirection as setHeroDirectionSystem,
+  updateHeroWalkAnimation as updateHeroWalkAnimationSystem,
+  heroTileX as heroTileXSystem,
+  heroTileY as heroTileYSystem,
+  heroFootTileX as heroFootTileXSystem,
+  heroFootTileY as heroFootTileYSystem,
+  setHeroTilePosition as setHeroTilePositionSystem,
+} from './systems/heroSystem.js';
+
+import {
+  tileToPx as tileToPxUtil,
+  pxToTile as pxToTileUtil,
+} from './utils/position.js';
+
 
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
@@ -383,39 +414,7 @@ import {
   //   hairCol  = 髪の色
   //   lines    = セリフの配列（1要素 = 1ページ）
   // ============================================================
-   const flags = {
-    defeatedDarkKnight: false, // ダークナイトを倒したかどうか
-    chest1Opened: false,       // 洞窟宝箱1（鉄の剣）col12,row8
-    chest2Opened: false,       // 洞窟宝箱2（ポーション）col3,row1
-    reachedField2: false,      // フィールド2に到達
-    reachedShadowTown: false,  // カゲのまちに到達
-    gotSeal1: false,           // 封印石・壱（第3段階用）
-    gotSeal2: false,           // 封印石・弐（第3段階用）
-    gotForestPass: false,      // 呪われた森の通行証
-    defeatedForestBoss: false, // 樹霊ジュレイを倒したか
-    gotDemonKey: false,        // 魔王の城への鍵
-    defeatedDemonGeneral: false, // 将軍デモルゴンを倒したか
-    defeatedDemonLord: false,    // 魔王ヴァルドールを倒したか
-    forestChest1Opened: false, // 森の宝箱1（左）
-    forestChest2Opened: false, // 森の宝箱2（右）
-    forestChest3Opened: false, // 森の宝箱3（森の杖）
-    forestChest4Opened: false, // 森の宝箱4（神秘のローブ）
-    fieldPondChestOpened: false, // フィールド池そばの宝箱
-    fieldRockChestOpened: false, // フィールド岩場の宝箱
-    talkedToElder: false,      // 長老と会話した
-    readCaveWarningSign: false, // 洞窟の警告看板を読んだ
-    talkedToOldBlacksmith: false, // 老鍛冶屋グルドと初回会話を終えた
-    gotOldFragment: false,         // 旅人の集落クエスト用・古い金属片
-    outpostQuestDone: false,       // 旅人の集落クエスト完了
-    field2FragmentChestOpened: false, // field2の古い金属片宝箱
-    outpostChest1Opened: false,    // 旧: 旅人の集落の宝箱（互換用）
-    castleChest1Opened: false,     // 魔王の城の宝箱（ポーション）
-    castleChest2Opened: false,     // 魔王の城の宝箱（ゴールド）
-    castleChest3Opened: false,     // 魔王の城の宝箱（騎士のよろい）
-    heardLeafaRumor: false,        // 光の街NPCからリーファの噂を聞いたか
-    leafaJoined: false,            // リーファが仲間になったか
-    leafaRescueDone: false,        // 北西の森のリーファ救出イベントが完了したか
-  };
+  const flags = createInitialFlags();
 
 
     function getHouseEntrancePoint(houseId) {
@@ -617,7 +616,7 @@ const ENCOUNTER_ENEMIES = {
   // ゲーム変数
   // ============================================================
   let currentState = GameState.TITLE;  // 現在のゲーム状態
-  let prologueState = { active: false, index: -1, lineStartTime: 0, cooldown: false };
+let prologueState = createInitialPrologueState();
   let titleMenuIndex = 0;
   let foe      = null;   // 戦闘中の敵オブジェクト
   let battleEnemies = [];
@@ -625,14 +624,14 @@ const ENCOUNTER_ENEMIES = {
   let battleTargetMode = null;
   let selectedTargetIndex = 0;
   let battleCommandIndex = 0;
-  let battleIntro = { active: false, lines: [], index: 0, timer: null, flashUntil: 0 };
+  let battleIntro = createInitialBattleIntro();
   let battleEnemySeq = 0;
   let msg      = '';     // バトルメッセージ
   let battleMessageQueue = [];
   let battleMessageTimer = null;
   let heroTurn = true;   // プレイヤーのターンかどうか（仲間コマンド選択中も true）
   let winMsg   = '';     // 勝利時のメッセージ
-  let battleVictory = { active: false, pending: false, messages: [], index: 0 };
+  let battleVictory = createInitialBattleVictory();
   let moveAnim = { active: false }; // 旧セーブ互換のため残す。現在の移動は速度ベース。
 
   // ── パーティ・2人戦闘システム ────────────────────────────
@@ -665,7 +664,7 @@ const ENCOUNTER_ENEMIES = {
   let lastEventEntityKey = null;
   let lastEncounterTerrainKey = null;
   let encounterTimer = null;
-  const keys = { up: false, down: false, left: false, right: false };
+  const keys = createInitialKeys();
 
   // ============================================================
   // Canvas の取得
@@ -694,36 +693,35 @@ const ENCOUNTER_ENEMIES = {
   }
 
   function tileToPx(n) {
-    return n * TILE_RENDER;
-  }
+  return tileToPxUtil(n, TILE_RENDER);
+}
 
-  function pxToTile(n) {
-    return Math.floor(n / TILE_RENDER);
-  }
+function pxToTile(n) {
+  return pxToTileUtil(n, TILE_RENDER);
+}
 
-  function heroTileX() {
-    return pxToTile(hero.x);
-  }
+function heroTileX() {
+  return heroTileXSystem(hero, pxToTile);
+}
 
-  function heroTileY() {
-    return pxToTile(hero.y);
-  }
+function heroTileY() {
+  return heroTileYSystem(hero, pxToTile);
+}
 
-  function heroFootTileX() {
-    return pxToTile(hero.x + TILE_RENDER / 2);
-  }
+function heroFootTileX() {
+  return heroFootTileXSystem(hero, pxToTile, TILE_RENDER);
+}
 
-  function heroFootTileY() {
-    return pxToTile(hero.y + TILE_RENDER - 4);
-  }
+function heroFootTileY() {
+  return heroFootTileYSystem(hero, pxToTile, TILE_RENDER);
+}
 
-  function setHeroTile(x, y) {
-    hero.x = tileToPx(x);
-    hero.y = tileToPx(y);
-    snapDrawPos();
-    lastEventEntityKey = null;
-    lastEncounterTerrainKey = null;
-  }
+function setHeroTile(x, y) {
+  setHeroTilePositionSystem(hero, x, y, tileToPx);
+  snapDrawPos();
+  lastEventEntityKey = null;
+  lastEncounterTerrainKey = null;
+}
 
   function setStartPosition() {
     runtimeState.currentMap = START_MAP;
@@ -1040,48 +1038,48 @@ function useElixir(target) {
   //   px, py = 描画するピクセル座標（左上）
   //   sc     = 拡大率（1=普通, 2=2倍, ...）
   // ============================================================
+
+  function getHeroSystemDeps() {
+  return {
+    HERO_WALK_IDLE_FRAME,
+    HERO_WALK_TICK,
+    HERO_WALK_SEQUENCE,
+  };
+}
+
   function setHeroDirection(direction) {
-    if (!HERO_WALK_ROWS.includes(direction)) direction = 'down';
-    hero.direction = direction;
-    hero.dir = direction;
-  }
+  return setHeroDirectionSystem(hero, direction, HERO_WALK_ROWS);
+}
 
   function updateHeroWalkAnimation(isMoving) {
-    if (!isMoving) {
-      hero.walkTimer = 0;
-      hero.walkFrame = HERO_WALK_IDLE_FRAME;
-      return;
-    }
-    hero.walkTimer = (hero.walkTimer || 0) + 1;
-    const sequenceIndex = Math.floor(hero.walkTimer / HERO_WALK_TICK) % HERO_WALK_SEQUENCE.length;
-    hero.walkFrame = HERO_WALK_SEQUENCE[sequenceIndex];
-  }
+  return updateHeroWalkAnimationSystem(
+    hero,
+    isMoving,
+    getHeroSystemDeps()
+  );
+}
 
   // hero.png（2×2スプライトシート）から向きに対応するコマ位置を返す。
   // 戻り値: { img, sx, sy, frameW, frameH } または null（未ロード時 → fillRect フォールバック）
-  function getHeroSpriteInfo(dir) {
-    const walkImg = spriteImgs.heroWalk;
-    if (walkImg && walkImg._ready) {
-      const frame = Math.max(0, Math.min(HERO_WALK_FRAME_COUNT - 1, hero.walkFrame ?? HERO_WALK_IDLE_FRAME));
-      const rects = HERO_WALK_FRAMES[dir] || HERO_WALK_FRAMES.down;
-      const rect = rects[frame] || rects[HERO_WALK_IDLE_FRAME];
-      return {
-        img: walkImg,
-        sx: rect.x,
-        sy: rect.y,
-        frameW: rect.w,
-        frameH: rect.h,
-      };
-    }
 
-    const img = spriteImgs.hero;
-    if (!img || !img._ready) return null;
-    const frameW = img.width  / 2;
-    const frameH = img.height / 2;
-    const srcMap = { down: [0, 0], right: [frameW, 0], left: [0, frameH], up: [frameW, frameH] };
-    const [sx, sy] = srcMap[dir] ?? [0, 0];
-    return { img, sx, sy, frameW, frameH };
-  }
+  function getHeroUIDeps() {
+  return {
+    spriteImgs,
+    hero,
+    HERO_WALK_FRAME_COUNT,
+    HERO_WALK_IDLE_FRAME,
+    HERO_WALK_FRAMES,
+    HERO_WALK_DRAW_W,
+    HERO_WALK_DRAW_H,
+    HERO_SC,
+    getHeroSpriteInfo,
+    drawHero,
+  };
+}
+
+  function getHeroSpriteInfo(dir) {
+  return getHeroSpriteInfoUI(dir, getHeroUIDeps());
+}
 
   function drawHero(px, py, sc = 1, dir = hero.direction || hero.dir || 'down') {
     ctx.save();
@@ -1325,18 +1323,14 @@ function useElixir(target) {
   }
 
   function drawHeroAtFoot(footX, footY, dir = hero.direction || hero.dir || 'down') {
-    const drawW = HERO_WALK_DRAW_W;
-    const drawH = HERO_WALK_DRAW_H;
-    const dx = Math.round(footX - drawW / 2);
-    const dy = Math.round(footY - drawH);
-
-    const si = getHeroSpriteInfo(dir);
-    if (si) {
-      ctx.drawImage(si.img, si.sx, si.sy, si.frameW, si.frameH, dx, dy, drawW, drawH);
-      return;
-    }
-    drawHero(dx, dy, HERO_SC, dir);
-  }
+  drawHeroAtFootUI(
+    ctx,
+    footX,
+    footY,
+    dir,
+    getHeroUIDeps()
+  );
+}
 
   // ============================================================
   // スプライト描画：スライム
@@ -4065,7 +4059,7 @@ function grantChestReward(reward) {
   }
 
   function finishPrologue() {
-    prologueState = { active: false, index: -1, lineStartTime: 0, cooldown: false };
+    prologueState = createInitialPrologueState();
     setGameState(GameState.MAP);
   }
 
@@ -5093,7 +5087,7 @@ function buyGreenRobe() {
     battleVictory.index++;
     if (battleVictory.index >= battleVictory.messages.length) {
       if (flags.defeatedDemonLord) {
-        battleVictory = { active: false, pending: false, messages: [], index: 0 };
+        battleVictory = createInitialBattleVictory();
         foe = null;
         battleEnemies = [];
         winMsg = '';
