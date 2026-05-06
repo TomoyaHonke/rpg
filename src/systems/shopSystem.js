@@ -92,3 +92,102 @@ export function buyAllyArmorOnce({ hero, allies, allyId, itemId, price, noAllyMe
 
   return { ok: true, message: successMessage };
 }
+
+export function openShop(npc, deps) {
+  const {
+    GameState,
+    setShopState,
+    setTalkState,
+    setSignState,
+    setGameState,
+    showShopBtns,
+  } = deps;
+
+  setShopState({
+    shopMsg: '',
+    shopCursor: 0,
+  });
+
+  setSignState({
+    activeSign: null,
+    readPage: 0,
+  });
+
+  setTalkState({
+    talkNpc: npc,
+    talkPage: 0,
+  });
+
+  setGameState(GameState.SHOP);
+  showShopBtns();
+}
+
+export function moveShopCursor(delta, deps) {
+  const {
+    shopCursor,
+    getShopOptions,
+    setShopState,
+    showShopBtns,
+  } = deps;
+
+  const options = getShopOptions();
+  if (!options.length) return false;
+
+  setShopState({
+    shopCursor: (shopCursor + options.length + delta) % options.length,
+  });
+
+  showShopBtns();
+  return true;
+}
+
+export function confirmShopChoice(deps) {
+  const {
+    shopCursor,
+    getShopOptions,
+    showShopBtns,
+  } = deps;
+
+  const options = getShopOptions();
+  const choice = options[shopCursor];
+
+  if (!choice) return false;
+
+  choice.action();
+
+  if (choice.id !== 'close') {
+    showShopBtns();
+  }
+
+  return true;
+}
+
+export function closeShop(deps) {
+  const {
+    GameState,
+    talkNpc,
+    getNpcRole,
+    handleDialogueComplete,
+    setTalkState,
+    setShopState,
+    setGameState,
+    hideBtns,
+  } = deps;
+
+  if (talkNpc && getNpcRole(talkNpc) === 'shop') {
+    handleDialogueComplete(talkNpc);
+  }
+
+  setTalkState({
+    talkNpc: null,
+    talkPage: 0,
+  });
+
+  setShopState({
+    shopMsg: '',
+    shopCursor: 0,
+  });
+
+  setGameState(GameState.MAP);
+  hideBtns();
+}

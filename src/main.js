@@ -207,6 +207,10 @@ import {
   buyHeroArmorOnce as buyHeroArmorOnceSystem,
   buyAllyWeaponOnce as buyAllyWeaponOnceSystem,
   buyAllyArmorOnce as buyAllyArmorOnceSystem,
+  openShop as openShopSystem,
+  moveShopCursor as moveShopCursorSystem,
+  confirmShopChoice as confirmShopChoiceSystem,
+  closeShop as closeShopSystem,
 } from './systems/shopSystem.js';
 
 import {
@@ -521,6 +525,22 @@ import {
   handleKeyUp as handleKeyUpSystem,
 } from './systems/inputSystem.js';
 
+import {
+  updateCurrentState as updateCurrentStateSystem,
+  drawCurrentState as drawCurrentStateSystem,
+} from './systems/gameLoopSystem.js';
+
+import {
+  moveEquipCursor as moveEquipCursorSystem,
+  moveEquipHorizontal as moveEquipHorizontalSystem,
+  cancelEquipMenu as cancelEquipMenuSystem,
+  confirmEquipMenu as confirmEquipMenuSystem,
+  handleEquipInput as handleEquipInputSystem,
+} from './systems/equipSystem.js';
+
+import {
+  renderEquipMenu as renderEquipMenuUI,
+} from './ui/equipUI.js';
 
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
@@ -1050,6 +1070,88 @@ function getInputSystemDeps() {
     backToMap,
     continueAfterGameOver,
     resetGame,
+    updateMoveKeyUp,
+  };
+}
+
+function getEquipSystemDeps() {
+  return {
+    equipMenuMode,
+    equipCursor,
+    equipCharacterIndex,
+    charaTabIndex,
+    equipSlotCursor,
+    itemCursor,
+    itemUseId,
+    itemTargetIndex,
+
+    ITEMS,
+
+    getUsableItems,
+    getPartyMembers,
+    getItemCount,
+    cycleActorEquipment,
+    useEther,
+    useElixir,
+    usePotionOnTarget,
+
+    showNotice,
+    refreshStatusBar,
+
+    setEquipState: nextState => {
+      if ('equipMenuMode' in nextState) equipMenuMode = nextState.equipMenuMode;
+      if ('equipCursor' in nextState) equipCursor = nextState.equipCursor;
+      if ('equipCharacterIndex' in nextState) equipCharacterIndex = nextState.equipCharacterIndex;
+      if ('charaTabIndex' in nextState) charaTabIndex = nextState.charaTabIndex;
+      if ('equipSlotCursor' in nextState) equipSlotCursor = nextState.equipSlotCursor;
+      if ('itemCursor' in nextState) itemCursor = nextState.itemCursor;
+      if ('itemUseId' in nextState) itemUseId = nextState.itemUseId;
+      if ('itemTargetIndex' in nextState) itemTargetIndex = nextState.itemTargetIndex;
+    },
+
+    closeEquipMenu: () => {
+      setGameState(GameState.MAP);
+    },
+    isCancelKey,
+    isConfirmKey,
+
+    cancelEquipMenu: () => cancelEquipMenuSystem(getEquipSystemDeps()),
+    moveEquipCursor: direction => moveEquipCursorSystem(direction, getEquipSystemDeps()),
+    moveEquipHorizontal: delta => moveEquipHorizontalSystem(delta, getEquipSystemDeps()),
+    confirmEquipMenu: () => confirmEquipMenuSystem(getEquipSystemDeps()),
+
+  };
+}
+
+function getShopSystemDeps() {
+  return {
+    GameState,
+
+    shopCursor,
+    talkNpc,
+
+    getShopOptions,
+    getNpcRole,
+    handleDialogueComplete,
+
+    setGameState,
+    showShopBtns,
+    hideBtns,
+
+    setShopState: nextState => {
+      if ('shopMsg' in nextState) shopMsg = nextState.shopMsg;
+      if ('shopCursor' in nextState) shopCursor = nextState.shopCursor;
+    },
+
+    setTalkState: nextState => {
+      if ('talkNpc' in nextState) talkNpc = nextState.talkNpc;
+      if ('talkPage' in nextState) talkPage = nextState.talkPage;
+    },
+
+    setSignState: nextState => {
+      if ('activeSign' in nextState) activeSign = nextState.activeSign;
+      if ('readPage' in nextState) readPage = nextState.readPage;
+    },
   };
 }
 
@@ -3625,104 +3727,56 @@ function updateMove() {
   function renderMap() {
   renderMapUI(getRenderMapDeps());
 }
+function getEquipUIDeps() {
+  return {
+    VIEW_W,
+    VIEW_H,
+    txt,
+
+    equipMenuMode,
+    equipCursor,
+    equipCharacterIndex,
+    charaTabIndex,
+    equipSlotCursor,
+    itemCursor,
+    itemUseId,
+    itemTargetIndex,
+
+    ITEMS,
+    SKILL_DEFS,
+    hero,
+
+    getUsableItems,
+    getItemCount,
+    getPartyMembers,
+    getCurrentWeapon,
+    getCurrentArmor,
+    getAllyWeapon,
+    getAllyArmor,
+    getAllySpeed,
+    getFaceSprite,
+
+    drawEquipMenuFrame,
+    drawEquipMainMenu,
+    drawItemList,
+    drawItemTargetList,
+    drawItemHelpText,
+    drawCharacterHeader,
+    drawCharacterStatusPanel,
+    drawEquipmentTab,
+    drawSkillTab,
+
+    setEquipState: nextState => {
+      if ('equipCharacterIndex' in nextState) {
+        equipCharacterIndex = nextState.equipCharacterIndex;
+      }
+    },
+  };
+}
 
   function renderEquipMenu() {
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
-    drawEquipMenuFrame(ctx, txt);
-
-    if (equipMenuMode === 'main') {
-        drawEquipMainMenu(ctx, txt, equipCursor);
-        ctx.restore();
-        return;
-    }
-
-    // ── 道具画面 ────────────────────────────────────────────
-    if (equipMenuMode === 'items' || equipMenuMode === 'itemTarget') {
-      txt('道具', 64, 124, '#ffddaa', 16);
-      const itemList = getUsableItems();
-      drawItemList(
-        ctx,
-        txt,
-        itemList,
-        itemCursor,
-        equipMenuMode === 'items',
-        getItemCount
-        );
-      if (equipMenuMode === 'itemTarget') {
-        const usingItem = ITEMS[itemUseId] || ITEMS.potion;
-        const members = getPartyMembers({ aliveOnly: true });
-
-        drawItemTargetList(
-        ctx,
-        txt,
-        usingItem,
-        members,
-        itemUseId,
-        itemTargetIndex
-        );
-      } else {
-        const selectedItem = itemList[itemCursor] || ITEMS.potion;
-        drawItemHelpText(txt, selectedItem, getItemCount);
-      }
-      ctx.restore();
-      return;
-    }
-
-    // ── キャラ画面 (chara / equip_slot) ─────────────────────
-    const members = getPartyMembers();
-    if (equipCharacterIndex >= members.length) equipCharacterIndex = Math.max(0, members.length - 1);
-    const selectedMember = members[equipCharacterIndex] || members[0];
-    const actor = selectedMember.actor;
-    const isHero = selectedMember.type === 'hero';
-
-    drawCharacterHeader(
-        ctx,
-        txt,
-        selectedMember.name,
-        members.length,
-        charaTabIndex
-    );
-    
-    const weapon = isHero ? getCurrentWeapon() : getAllyWeapon(actor);
-    const armor  = isHero ? getCurrentArmor()  : getAllyArmor(actor);
-    const baseAtk  = isHero ? hero.atk : (actor.baseAtk || 0);
-    const baseDef  = isHero ? hero.def : (actor.baseDef || 0);
-    const speed    = isHero ? hero.speed : getAllySpeed(actor);
-    const weaponAtk = weapon.attack ?? weapon.attackBonus ?? 0;
-    const armorDef  = armor.defense  ?? armor.defenseBonus  ?? 0;
-
-    drawCharacterStatusPanel(
-        ctx,
-        txt,
-        actor,
-        isHero,
-        getFaceSprite(actor),
-        {
-            attack: baseAtk + weaponAtk,
-            defense: baseDef + armorDef,
-            speed,
-        }
-    ); 
-
-    if (charaTabIndex === 0) {
-        drawEquipmentTab(ctx, txt, {
-            weapon,
-            armor,
-            weaponAtk,
-            armorDef,
-            baseAtk,
-            baseDef,
-            equipMenuMode,
-            equipSlotCursor,
-        });
-        } else {
-            const skills = isHero ? (hero.skills || []) : (actor.skills || []);
-            drawSkillTab(txt, skills, SKILL_DEFS);
-        }
-
-    ctx.restore();
-  }
+  renderEquipMenuUI(ctx, getEquipUIDeps());
+}
 
   // ============================================================
   // バトル画面を描画する
@@ -4219,28 +4273,37 @@ function updateMoveKeyUp(e) {
     renderEquipMenu();
   }
 
-  function updateCurrentState() {
-    if (currentState === GameState.TITLE) {}
-    else if (currentState === GameState.PROLOGUE) {}
-    else if (currentState === GameState.MAP) updateMap();
-    else if (currentState === GameState.TALK) updateTalk();
-    else if (currentState === GameState.SHOP) updateShop();
-    else if (currentState === GameState.BATTLE) updateBattle();
-    else if (currentState === GameState.EQUIP) updateEquip();
-  }
+  function getGameLoopSystemDeps() {
+  return {
+    currentState,
+    GameState,
 
-  function drawCurrentState() {
-    if (currentState === GameState.TITLE) renderTitle();
-    else if (currentState === GameState.PROLOGUE) renderPrologue();
-    else if (currentState === GameState.MAP) renderMap();
-    else if (currentState === GameState.TALK) drawTalk();
-    else if (currentState === GameState.SHOP) drawShop();
-    else if (currentState === GameState.BATTLE) drawBattle();
-    else if (currentState === GameState.EQUIP) drawEquip();
-    else if (currentState === GameState.WIN) renderWin();
-    else if (currentState === GameState.LOSE) renderLose();
-    else if (currentState === GameState.ENDING) renderEnding();
-  }
+    updateMap,
+    updateTalk,
+    updateShop,
+    updateBattle,
+    updateEquip,
+
+    renderTitle,
+    renderPrologue,
+    renderMap,
+    drawTalk,
+    drawShop,
+    drawBattle,
+    drawEquip,
+    renderWin,
+    renderLose,
+    renderEnding,
+  };
+}
+
+function updateCurrentState() {
+  updateCurrentStateSystem(getGameLoopSystemDeps());
+}
+
+function drawCurrentState() {
+  drawCurrentStateSystem(getGameLoopSystemDeps());
+}
 
   function loop() {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
@@ -4343,34 +4406,6 @@ function getShopOptions() {
     btnArea.style.flexDirection = '';
     btnArea.innerHTML = '';
   }
-
-  function moveShopCursor(delta) {
-    const options = getShopOptions();
-    if (!options.length) return;
-    shopCursor = (shopCursor + options.length + delta) % options.length;
-    showShopBtns();
-  }
-
-  function confirmShopChoice() {
-    const options = getShopOptions();
-    const choice = options[shopCursor];
-    if (!choice) return;
-    choice.action();
-    if (choice.id !== 'close') showShopBtns();
-  }
-
-  function closeShop() {
-    if (talkNpc && getNpcRole(talkNpc) === 'shop') {
-      handleDialogueComplete(talkNpc);
-    }
-    talkNpc = null;
-    talkPage = 0;
-    shopMsg = '';
-    shopCursor = 0;
-    setGameState(GameState.MAP);
-    hideBtns();
-  }
-
 
 function buyPotion() {
   if (!isShopAvailable()) return;
@@ -4518,15 +4553,20 @@ function buyGreenRobe() {
   }
 
   function openShop(npc) {
-    shopMsg = '';
-    activeSign = null;
-    readPage = 0;
-    talkNpc = npc;
-    talkPage = 0;
-    shopCursor = 0;
-    setGameState(GameState.SHOP);
-    showShopBtns();
-  }
+  openShopSystem(npc, getShopSystemDeps());
+}
+
+function moveShopCursor(delta) {
+  moveShopCursorSystem(delta, getShopSystemDeps());
+}
+
+function confirmShopChoice() {
+  confirmShopChoiceSystem(getShopSystemDeps());
+}
+
+function closeShop() {
+  closeShopSystem(getShopSystemDeps());
+}
 
   // セリフを1ページ進める（最終ページなら会話終了）
   function advanceDialogue() {
@@ -6247,171 +6287,9 @@ function loadGame() {
 }
 
 function handleEquipInput(e) {
-  if (isCancelKey(e)) {
-    e.preventDefault();
-    if (equipMenuMode === 'equip_slot') {
-      equipMenuMode = 'chara';
-      return;
-    }
-    if (equipMenuMode === 'chara' || equipMenuMode === 'items') {
-      equipMenuMode = 'main';
-      equipCursor = 0;
-      return;
-    }
-    if (equipMenuMode === 'itemTarget') {
-      equipMenuMode = 'items';
-      return;
-    }
-    setGameState(GameState.MAP);
-    return;
-  }
-
-  if (e.key === 'e' || e.key === 'E') {
-    e.preventDefault();
-    setGameState(GameState.MAP);
-    return;
-  }
-
-  if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    if (equipMenuMode === 'main') {
-      equipCursor = (equipCursor + 1) % 2;
-    } else if (equipMenuMode === 'chara') {
-      charaTabIndex = (charaTabIndex + 1) % 2;
-    } else if (equipMenuMode === 'equip_slot') {
-      equipSlotCursor = (equipSlotCursor + 1) % 2;
-    } else if (equipMenuMode === 'items') {
-      const items = getUsableItems();
-      itemCursor = items.length ? (itemCursor + items.length - 1) % items.length : 0;
-    } else if (equipMenuMode === 'itemTarget') {
-      const members = getPartyMembers({ aliveOnly: true });
-      itemTargetIndex = members.length ? (itemTargetIndex + members.length - 1) % members.length : 0;
-    }
-    return;
-  }
-
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    if (equipMenuMode === 'main') {
-      equipCursor = (equipCursor + 1) % 2;
-    } else if (equipMenuMode === 'chara') {
-      charaTabIndex = (charaTabIndex + 1) % 2;
-    } else if (equipMenuMode === 'equip_slot') {
-      equipSlotCursor = (equipSlotCursor + 1) % 2;
-    } else if (equipMenuMode === 'items') {
-      const items = getUsableItems();
-      itemCursor = items.length ? (itemCursor + 1) % items.length : 0;
-    } else if (equipMenuMode === 'itemTarget') {
-      const members = getPartyMembers({ aliveOnly: true });
-      itemTargetIndex = members.length ? (itemTargetIndex + 1) % members.length : 0;
-    }
-    return;
-  }
-
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    e.preventDefault();
-    const delta = e.key === 'ArrowLeft' ? -1 : 1;
-
-    if (equipMenuMode === 'chara' || equipMenuMode === 'equip_slot') {
-      const members = getPartyMembers();
-      equipCharacterIndex = members.length
-        ? (equipCharacterIndex + members.length + delta) % members.length
-        : 0;
-
-      if (equipMenuMode === 'equip_slot') {
-        equipSlotCursor = 0;
-      }
-    } else if (equipMenuMode === 'itemTarget') {
-      const members = getPartyMembers({ aliveOnly: true });
-      itemTargetIndex = members.length
-        ? (itemTargetIndex + members.length + delta) % members.length
-        : 0;
-    } else if (equipMenuMode === 'main') {
-      equipCursor = (equipCursor + 1) % 2;
-    }
-    return;
-  }
-
-  if (e.key === 'Enter' || e.key === ' ' || e.key === 'z' || e.key === 'Z') {
-    e.preventDefault();
-
-    if (equipMenuMode === 'main') {
-      if (equipCursor === 0) {
-        equipMenuMode = 'chara';
-        charaTabIndex = 0;
-        equipCharacterIndex = 0;
-      } else {
-        equipMenuMode = 'items';
-        itemCursor = 0;
-        itemUseId = 'potion';
-        itemTargetIndex = 0;
-      }
-      return;
-    }
-
-    if (equipMenuMode === 'chara') {
-      if (charaTabIndex === 0) {
-        equipMenuMode = 'equip_slot';
-        equipSlotCursor = 0;
-      }
-      return;
-    }
-
-    if (equipMenuMode === 'equip_slot') {
-      const member = getPartyMembers()[equipCharacterIndex];
-
-      if (member && member.actor) {
-        const changed = cycleActorEquipment(
-          member.actor,
-          equipSlotCursor === 0 ? 'weapon' : 'armor',
-          1
-        );
-
-        if (!changed) {
-          showNotice('装備できるものがない！');
-        }
-      } else {
-        showNotice('装備できるものがない！');
-      }
-
-      refreshStatusBar();
-      return;
-    }
-
-    if (equipMenuMode === 'items') {
-      const selectedItem = getUsableItems()[itemCursor] || ITEMS.potion;
-
-      if (getItemCount(selectedItem.id) <= 0) {
-        showNotice(`${selectedItem.name}を持っていない！`);
-      } else {
-        equipMenuMode = 'itemTarget';
-        itemUseId = selectedItem.id;
-        itemTargetIndex = 0;
-      }
-      return;
-    }
-
-    if (equipMenuMode === 'itemTarget') {
-      const members = getPartyMembers({ aliveOnly: true });
-      const member = members[itemTargetIndex];
-
-      const result = itemUseId === 'ether'
-        ? useEther(member && member.actor)
-        : itemUseId === 'elixir'
-          ? useElixir(member && member.actor)
-          : usePotionOnTarget(member && member.actor);
-
-      showNotice(result.message);
-
-      if (result.ok || getItemCount(itemUseId) <= 0) {
-        equipMenuMode = 'items';
-      }
-
-      refreshStatusBar();
-      return;
-    }
-  }
+  return handleEquipInputSystem(e, getEquipSystemDeps());
 }
+
 
   // ============================================================
   // キーボード入力
@@ -6428,8 +6306,22 @@ function handlePrologueInput(e) {
   return handlePrologueInputSystem(e, getInputSystemDeps());
 }
 
+function clearMoveKeys() {
+  keys.up = false;
+  keys.down = false;
+  keys.left = false;
+  keys.right = false;
+
+  hero.vx = 0;
+  hero.vy = 0;
+}
+
 function handleKeyUp(e) {
   handleKeyUpSystem(e, getInputSystemDeps());
+
+  if (currentState !== GameState.MAP) {
+    clearMoveKeys();
+  }
 }
 
 function handleKeyDown(e) {
