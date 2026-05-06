@@ -562,6 +562,33 @@ import {
   drawTalk as drawTalkUI,
 } from './ui/dialogueUI.js';
 
+import {
+  renderLose as renderLoseUI,
+  renderEnding as renderEndingUI,
+} from './ui/resultUI.js';
+
+import {
+  continueAfterGameOver as continueAfterGameOverSystem,
+  resetBattleAndUiState as resetBattleAndUiStateSystem,
+  resetHeroForNewGame as resetHeroForNewGameSystem,
+  resetProgressUiStateForNewGame as resetProgressUiStateForNewGameSystem,
+  resetFlagsForNewGame as resetFlagsForNewGameSystem,
+  resetRuntimeStateForNewGame as resetRuntimeStateForNewGameSystem,
+  resetGame as resetGameSystem,
+} from './systems/gameStateSystem.js';
+
+import {
+  startPrologue as startPrologueSystem,
+  advancePrologueLine as advancePrologueLineSystem,
+  finishPrologue as finishPrologueSystem,
+  skipPrologue as skipPrologueSystem,
+} from './systems/prologueSystem.js';
+
+import {
+  refreshStatusBar as refreshStatusBarSystem,
+  showShopBtns as showShopBtnsSystem,
+} from './systems/uiSystem.js';
+
   function joinAlly(id) {
     if (allies.find(a => a.id === id)) return;
     const def = ALLY_DEFS[id];
@@ -1273,6 +1300,120 @@ function getDialogueUIDeps() {
   };
 }
 
+function getResultUIDeps() {
+  return {
+    VIEW_W,
+    VIEW_H,
+    txt,
+    drawHero,
+  };
+}
+
+function getGameStateSystemDeps() {
+  return {
+    hero,
+    allies,
+    GameState,
+
+    recoverActorAfterGameOver,
+    setStartPosition,
+    setGameState,
+    resetBattleAndUiState,
+    showNotice,
+
+    clearBattleIntro,
+    clearFireEffectsUI,
+    clearLeafEffectsUI,
+    clearSlashEffectsUI,
+    clearHitEffectsUI,
+    hideBtns,
+
+    setBattleState: nextState => {
+      if ('foe' in nextState) foe = nextState.foe;
+      if ('battleEnemies' in nextState) battleEnemies = nextState.battleEnemies;
+      if ('battleTurnQueue' in nextState) battleTurnQueue = nextState.battleTurnQueue;
+      if ('battleTargetMode' in nextState) battleTargetMode = nextState.battleTargetMode;
+      if ('selectedTargetIndex' in nextState) selectedTargetIndex = nextState.selectedTargetIndex;
+      if ('heroTurn' in nextState) heroTurn = nextState.heroTurn;
+      if ('currentBattleBgKey' in nextState) currentBattleBgKey = nextState.currentBattleBgKey;
+      if ('winMsg' in nextState) winMsg = nextState.winMsg;
+      if ('battleVictory' in nextState) battleVictory = nextState.battleVictory;
+    },
+
+    setDialogueState: nextState => {
+      if ('talkNpc' in nextState) talkNpc = nextState.talkNpc;
+      if ('talkPage' in nextState) talkPage = nextState.talkPage;
+      if ('activeSign' in nextState) activeSign = nextState.activeSign;
+      if ('readPage' in nextState) readPage = nextState.readPage;
+    },
+    setItemState: nextState => {
+  if ('itemCursor' in nextState) itemCursor = nextState.itemCursor;
+  if ('itemUseId' in nextState) itemUseId = nextState.itemUseId;
+  if ('itemTargetIndex' in nextState) itemTargetIndex = nextState.itemTargetIndex;
+},
+
+    setShopState: nextState => {
+    if ('shopCursor' in nextState) shopCursor = nextState.shopCursor;
+    if ('shopMsg' in nextState) shopMsg = nextState.shopMsg;
+    },
+
+    setQuestState: nextState => {
+    if ('slimeKills' in nextState) slimeKills = nextState.slimeKills;
+    if ('questDone' in nextState) questDone = nextState.questDone;
+    if ('questRewardMsg' in nextState) questRewardMsg = nextState.questRewardMsg;
+    },
+    runtimeState,
+    tileToPx,
+    resetHeroForNewGame: heroArg => resetHeroForNewGameSystem(heroArg),
+    resetProgressUiStateForNewGame: () =>
+    resetProgressUiStateForNewGameSystem(getGameStateSystemDeps()),
+    resetFlagsForNewGame: flagsArg => resetFlagsForNewGameSystem(flagsArg),
+    resetRuntimeStateForNewGame: () =>
+    resetRuntimeStateForNewGameSystem(getGameStateSystemDeps()),
+    resetBattleAndUiState,
+    flags,
+  };
+}
+
+function getPrologueSystemDeps() {
+  return {
+    GameState,
+    PROLOGUE_LINES,
+    prologueState,
+
+    hideBtns,
+    createInitialPrologueState,
+    setGameState,
+
+    getPrologueState: () => prologueState,
+
+    setCurrentState: nextState => {
+      currentState = nextState;
+    },
+
+    setPrologueState: nextState => {
+      prologueState = {
+        ...prologueState,
+        ...nextState,
+      };
+    },
+
+    advancePrologueLine,
+    finishPrologue,
+  };
+}
+
+function getUISystemDeps() {
+  return {
+    hero,
+    getCurrentWeapon,
+    getCurrentArmor,
+    getLocationName,
+    updateStatusBar,
+
+    btnArea,
+  };
+}
 function getCurrentMapId() {
   return getCurrentMapIdSystem(getMapSystemDeps());
 }
@@ -4103,91 +4244,14 @@ function getEquipUIDeps() {
   ctx.restore();
 }
 
-  // ============================================================
-  // 勝利画面を描画する
-  // ============================================================
-  function renderWin() {
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
-    ctx.fillStyle = '#050520';
-    ctx.fillRect(0, 0, 512, 384);
 
-    // きらきらエフェクト（時間で動く星）
-    const t = Date.now() / 700;
-    ctx.fillStyle = '#ffd700';
-    for (let i = 0; i < 28; i++) {
-      const sx = ((Math.sin(i * 2.4 + t) * 0.5 + 0.5) * 512) | 0;
-      const sy = ((Math.cos(i * 1.9 + t * 0.7) * 0.5 + 0.5) * 384) | 0;
-      ctx.fillRect(sx, sy, 3, 3);
-    }
 
-    txt('★  Victory!  ★', 118, 130, '#ffd700', 36);
-    txt('てきを  たおした！', 148, 190, '#ffffff', 20);
-    if (Array.isArray(winMsg)) {
-      winMsg.forEach((line, i) => txt(line, 120, 218 + i * 22, '#aaffaa', 16));
-    } else {
-      txt(winMsg, 162, 228, '#aaffaa', 16);
-    }
-    txt('なにかキーを押してマップへ', 130, 292, '#8888ff', 15);
-
-    drawHero(120, 300, 2);
-    const winEnemy = getMainBattleEnemy();
-    if (winEnemy) drawEnemy(winEnemy, 340, 300, 2);
-    ctx.restore();
-  }
-
-  // ============================================================
-  // ゲームオーバー画面を描画する
-  // ============================================================
-  function renderLose() {
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384); // UI は 512×384 座標で記述 → 2倍表示
-    ctx.fillStyle = '#150000';
-    ctx.fillRect(0, 0, 512, 384);
-    txt('GAME  OVER', 128, 182, '#ff2222', 42);
-    txt('ちからつきた…', 172, 248, '#cccccc', 20);
-    txt('なにかキーを押してやりなおす', 112, 314, '#888888', 15);
-    ctx.restore();
-  }
-
-  // ============================================================
-  // エンディング画面を描画する
-  // ============================================================
-  function renderEnding() {
-    ctx.save();
-    ctx.scale(VIEW_W / 512, VIEW_H / 384);
-    ctx.fillStyle = '#000814';
-    ctx.fillRect(0, 0, 512, 384);
-
-    // 星空
-    const t = Date.now() / 1400;
-    for (let i = 0; i < 60; i++) {
-      const sx = ((Math.sin(i * 3.7 + t * 0.2) * 0.5 + 0.5) * 512) | 0;
-      const sy = ((Math.cos(i * 2.3 + t * 0.15) * 0.5 + 0.5) * 200) | 0;
-      const alpha = 0.5 + 0.5 * Math.sin(i * 1.3 + t);
-      ctx.fillStyle = `rgba(255, 240, 180, ${alpha.toFixed(2)})`;
-      ctx.fillRect(sx, sy, 2, 2);
-    }
-
-    // 光のグラデーション（下から上へ）
-    const grad = ctx.createLinearGradient(0, 384, 0, 200);
-    grad.addColorStop(0, 'rgba(20, 40, 100, 0.55)');
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 200, 512, 184);
-
-    txt('★  THE  END  ★', 108, 68, '#ffd700', 34);
-    txt('魔王ヴァルドールを　倒した！', 92, 130, '#ffffff', 18);
-    txt('世界を覆っていた闇が　消えていく…', 62, 162, '#aaddff', 15);
-    txt('ゆうしゃは　伝説となった。', 106, 202, '#ffdd88', 16);
-
-    // 主人公を中央に大きく描画
-    drawHero(226, 286, 2.6);
-
-    txt('おわり', 210, 336, '#ffffaa', 20);
-    // txt('なにかキーを押すとタイトルへ戻る', 86, 364, '#556677', 13);
-    ctx.restore();
-  }
+function renderLose() {
+  renderLoseUI(ctx, getResultUIDeps());
+}
+function renderEnding() {
+  renderEndingUI(ctx, getResultUIDeps());
+}
 
   // ============================================================
   // タイトル画面を描画する
@@ -4202,37 +4266,20 @@ function getEquipUIDeps() {
  
 
   function startPrologue() {
-    prologueState = { active: true, index: -1, lineStartTime: 0, cooldown: false };
-    currentState = GameState.PROLOGUE;
-    hideBtns();
-    advancePrologueLine();
-  }
+  return startPrologueSystem(getPrologueSystemDeps());
+}
 
-  function advancePrologueLine() {
-    if (!prologueState.active) return;
-    prologueState.index++;
-    // 空行はスキップ
-    while (prologueState.index < PROLOGUE_LINES.length && PROLOGUE_LINES[prologueState.index] === '') {
-      prologueState.index++;
-    }
-    if (prologueState.index >= PROLOGUE_LINES.length) {
-      finishPrologue();
-      return;
-    }
-    prologueState.lineStartTime = Date.now();
-    prologueState.cooldown = true;
-    setTimeout(() => { if (prologueState.active) prologueState.cooldown = false; }, 150);
-  }
+function advancePrologueLine() {
+  return advancePrologueLineSystem(getPrologueSystemDeps());
+}
 
-  function finishPrologue() {
-    prologueState = createInitialPrologueState();
-    setGameState(GameState.MAP);
-  }
+function finishPrologue() {
+  return finishPrologueSystem(getPrologueSystemDeps());
+}
 
-  function skipPrologue() {
-    if (!prologueState.active) return;
-    finishPrologue();
-  }
+function skipPrologue() {
+  return skipPrologueSystem(getPrologueSystemDeps());
+}
 
   function renderPrologue() {
     renderPrologueUI(ctx, VIEW_W, VIEW_H, prologueState, PROLOGUE_LINES);
@@ -4245,12 +4292,7 @@ function getEquipUIDeps() {
   // HTML ステータスバーを更新する
   // ============================================================
 function refreshStatusBar() {
-  updateStatusBar(
-    hero,
-    getCurrentWeapon().name,
-    getCurrentArmor().name,
-    getLocationName()
-  );
+  refreshStatusBarSystem(getUISystemDeps());
 }
 
   function getLocationName() {
@@ -4405,7 +4447,6 @@ function drawTalk() {
     drawShop,
     drawBattle,
     drawEquip,
-    renderWin,
     renderLose,
     renderEnding,
   };
@@ -4530,10 +4571,8 @@ function buyGreenRobe() {
 
 
   function showShopBtns() {
-    btnArea.classList.add('noPointer');
-    btnArea.style.flexDirection = '';
-    btnArea.innerHTML = '';
-  }
+  showShopBtnsSystem(getUISystemDeps());
+}
 
   // ============================================================
   // 会話（トーク）システム
@@ -6251,88 +6290,18 @@ function handleTalkInput(e) {
     if ('tempStatus' in actor) actor.tempStatus = null;
   }
 
-  // ゲームオーバー後の復帰。成長・所持品・進行・宝箱状態は維持する。
-  function continueAfterGameOver() {
-    recoverActorAfterGameOver(hero);
-    for (const ally of allies) {
-      if (ally && ally.flags && ally.flags.hasAlly) {
-        recoverActorAfterGameOver(ally);
-      }
-    }
-    setStartPosition();
-    setGameState(GameState.MAP);
-    foe = null;
-    battleEnemies = [];
-    battleTurnQueue = [];
-    battleTargetMode = null;
-    selectedTargetIndex = 0;
-    clearBattleIntro();
-    heroTurn = true;
-    currentBattleBgKey = 'field';
-    winMsg = '';
-    battleVictory = { active: false, pending: false, messages: [], index: 0 };
-    talkNpc = null;
-    talkPage = 0;
-    activeSign = null;
-    readPage = 0;
-    clearFireEffectsUI(); clearLeafEffectsUI(); clearSlashEffectsUI(); clearHitEffectsUI();
-    hideBtns();
-    showNotice('ヒカリのまちへ戻された…');
-  }
+ function continueAfterGameOver() {
+  return continueAfterGameOverSystem(getGameStateSystemDeps());
+}
 
   // ゲームをリセット（最初から）
   function resetGame() {
-    hero.level = 1;
-    hero.exp = 0;
-    hero.maxHp = 30;
-    hero.maxMp = 120;
-    hero.hp = hero.maxHp;
-    hero.mp = hero.maxMp;
-    hero.atk = 700;
-    hero.def = 0;
-    hero.speed = 100;
-    hero.weapon = 'woodSword';
-    hero.armor = 'travelerClothes';
-    hero.weaponsOwned = ['woodSword'];
-    hero.armorsOwned = ['travelerClothes'];
-    hero.gold = 0;
-    hero.potions = 0;
-    hero.inventory = { ether: 0 };
-    itemCursor = 0;
-    itemUseId = 'potion';
-    itemTargetIndex = 0;
-    shopCursor = 0;
-    slimeKills = 0;
-    questDone = false;
-    questRewardMsg = '';
-    shopMsg = '';
-    for (const key of Object.keys(flags)) flags[key] = false;
-    runtimeState.townReturn = { x: tileToPx(10), y: tileToPx(2), exitDir: 'down' };
-    runtimeState.dungeonReturn = { x: tileToPx(13), y: tileToPx(8), exitDir: 'up' };
-    runtimeState.field2Return = { x: tileToPx(2), y: tileToPx(10), exitDir: 'up' };
-    runtimeState.shadowTownReturn = { x: tileToPx(3), y: tileToPx(1), exitDir: 'down' };
-    runtimeState.cursedForestReturn = { x: tileToPx(3), y: tileToPx(10), exitDir: 'up' };
-    runtimeState.outpostReturn = { x: tileToPx(12), y: tileToPx(5), exitDir: 'right' };
-    runtimeState.houseReturn = { x: tileToPx(6), y: tileToPx(5) };
-    runtimeState.castleReturn  = { x: tileToPx(12), y: tileToPx(1), exitDir: 'down' };
-    setStartPosition();
-    foe     = null;
-    battleEnemies = [];
-    battleTurnQueue = [];
-    battleTargetMode = null;
-    selectedTargetIndex = 0;
-    clearBattleIntro();
-    heroTurn = true;
-    currentBattleBgKey = 'field';
-    winMsg = '';
-    battleVictory = { active: false, pending: false, messages: [], index: 0 };
-    talkNpc = null;
-    talkPage = 0;
-    activeSign = null;
-    readPage = 0;
-    clearFireEffectsUI(); clearLeafEffectsUI(); clearSlashEffectsUI(); clearHitEffectsUI();
-    hideBtns();
-  }
+  return resetGameSystem(getGameStateSystemDeps());
+}
+
+  function resetBattleAndUiState() {
+  resetBattleAndUiStateSystem(getGameStateSystemDeps());
+}
 
   // ============================================================
   // ゲーム開始！
