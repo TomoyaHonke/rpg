@@ -9,6 +9,7 @@ export function moveEquipCursor(direction, deps) {
     getUsableItems,
     getPartyMembers,
     setEquipState,
+    playSE = () => {},
   } = deps;
 
   if (direction === 'up') {
@@ -32,6 +33,7 @@ export function moveEquipCursor(direction, deps) {
       });
     }
 
+    playSE('cursor');
     return true;
   }
 
@@ -54,6 +56,7 @@ export function moveEquipCursor(direction, deps) {
       });
     }
 
+    playSE('cursor');
     return true;
   }
 
@@ -67,6 +70,7 @@ export function moveEquipHorizontal(delta, deps) {
     equipCharacterIndex,
     getPartyMembers,
     setEquipState,
+    playSE = () => {},
   } = deps;
 
   if (equipMenuMode === 'chara' || equipMenuMode === 'equip_slot') {
@@ -79,6 +83,7 @@ export function moveEquipHorizontal(delta, deps) {
       ...(equipMenuMode === 'equip_slot' ? { equipSlotCursor: 0 } : {}),
     });
 
+    playSE('cursor');
     return true;
   }
 
@@ -91,6 +96,7 @@ export function moveEquipHorizontal(delta, deps) {
         : 0,
     });
 
+    playSE('cursor');
     return true;
   }
 
@@ -99,6 +105,7 @@ export function moveEquipHorizontal(delta, deps) {
       equipCursor: (equipCursor + 1) % 2,
     });
 
+    playSE('cursor');
     return true;
   }
 
@@ -110,14 +117,17 @@ export function cancelEquipMenu(deps) {
     equipMenuMode,
     setEquipState,
     closeEquipMenu,
+    playSE = () => {},
   } = deps;
 
   if (equipMenuMode === 'equip_slot') {
+    playSE('cancel');
     setEquipState({ equipMenuMode: 'chara' });
     return true;
   }
 
   if (equipMenuMode === 'chara' || equipMenuMode === 'items') {
+    playSE('cancel');
     setEquipState({
       equipMenuMode: 'main',
       equipCursor: 0,
@@ -126,10 +136,12 @@ export function cancelEquipMenu(deps) {
   }
 
   if (equipMenuMode === 'itemTarget') {
+    playSE('cancel');
     setEquipState({ equipMenuMode: 'items' });
     return true;
   }
 
+  playSE('cancel');
   closeEquipMenu();
   return true;
 }
@@ -157,9 +169,11 @@ export function confirmEquipMenu(deps) {
     showNotice,
     refreshStatusBar,
     setEquipState,
+    playSE = () => {},
   } = deps;
 
   if (equipMenuMode === 'main') {
+    playSE('confirm');
     if (equipCursor === 0) {
       setEquipState({
         equipMenuMode: 'chara',
@@ -179,6 +193,7 @@ export function confirmEquipMenu(deps) {
   }
 
   if (equipMenuMode === 'chara') {
+    playSE('confirm');
     if (charaTabIndex === 0) {
       setEquipState({
         equipMenuMode: 'equip_slot',
@@ -190,6 +205,7 @@ export function confirmEquipMenu(deps) {
   }
 
   if (equipMenuMode === 'equip_slot') {
+    playSE('confirm');
     const member = getPartyMembers()[equipCharacterIndex];
 
     if (member && member.actor) {
@@ -200,9 +216,11 @@ export function confirmEquipMenu(deps) {
       );
 
       if (!changed) {
+        playSE('error');
         showNotice('装備できるものがない！');
       }
     } else {
+      playSE('error');
       showNotice('装備できるものがない！');
     }
 
@@ -211,9 +229,11 @@ export function confirmEquipMenu(deps) {
   }
 
   if (equipMenuMode === 'items') {
+    playSE('confirm');
     const selectedItem = getUsableItems()[itemCursor] || ITEMS.potion;
 
     if (getItemCount(selectedItem.id) <= 0) {
+      playSE('error');
       showNotice(`${selectedItem.name}を持っていない！`);
     } else {
       setEquipState({
@@ -237,6 +257,7 @@ export function confirmEquipMenu(deps) {
         : usePotionOnTarget(member && member.actor);
 
     showNotice(result.message);
+    playSE(result.ok ? 'heal' : 'error');
 
     if (result.ok || getItemCount(itemUseId) <= 0) {
       setEquipState({

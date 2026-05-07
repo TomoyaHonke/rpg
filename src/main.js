@@ -224,6 +224,21 @@ import {
 } from './systems/shopSystem.js';
 
 import {
+  loadSE,
+  playSE,
+  loadBGM,
+  playBGM,
+  stopBGM,
+  setSEVolume,
+  setBGMVolume,
+  muteSE,
+  muteBGM,
+  unmuteSE,
+  unmuteBGM,
+  getCurrentBGMKey,
+} from './systems/audioSystem.js';
+
+import {
   cycleActorEquipment as cycleActorEquipmentSystem,
   getCurrentWeapon as getCurrentWeaponSystem,
   getHeroAttack as getHeroAttackSystem,
@@ -1083,6 +1098,7 @@ function getTitleSystemDeps() {
     },
     isConfirmKey,
     startTitleMenuAction,
+    playSE,
 
     TitleAction,
     resetGame,
@@ -1119,6 +1135,7 @@ function getInputSystemDeps() {
     openEquipMenu,
     getAdjacentInteractable,
     getAdjacentBoss,
+    playSE,
 
     battleIntro,
     skipBattleIntro,
@@ -1182,6 +1199,7 @@ function getEquipSystemDeps() {
 
     showNotice,
     refreshStatusBar,
+    playSE,
 
     setEquipState: nextState => {
       if ('equipMenuMode' in nextState) equipMenuMode = nextState.equipMenuMode;
@@ -1548,7 +1566,9 @@ function getAllyNextExp(ally) {
 }
 
 function gainAllyExp(ally, amount) {
-  return gainAllyExpSystem(ally, amount);
+  const result = gainAllyExpSystem(ally, amount);
+  if (result.leveled) playSE('level_up');
+  return result;
 }
 
   function getEquipItems() {
@@ -1656,7 +1676,9 @@ function useElixir(target) {
 
   // 経験値を加算し、一定値に達したらレベルアップする
   function gainExp(amount) {
-  return gainHeroExpSystem(hero, amount);
+  const result = gainHeroExpSystem(hero, amount);
+  if (result.leveled) playSE('level_up');
+  return result;
 }
 
   // ============================================================
@@ -1722,231 +1744,6 @@ function useElixir(target) {
       ctx.drawImage(si.img, si.sx, si.sy, si.frameW, si.frameH, 0, 0, 32, 32);
       ctx.restore();
       return;
-    }
-
-    const shadow = () => {
-      ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.fillRect(8, 29, 16, 2);
-    };
-    const boots = () => {
-      ctx.fillStyle = '#6b3b1f';
-      ctx.fillRect(9, 25, 5, 5);
-      ctx.fillRect(18, 25, 5, 5);
-      ctx.fillRect(8, 29, 7, 2);
-      ctx.fillRect(17, 29, 7, 2);
-      ctx.fillStyle = '#3a2418';
-      ctx.fillRect(9, 28, 5, 2);
-      ctx.fillRect(18, 28, 5, 2);
-      ctx.fillRect(8, 30, 7, 1);
-      ctx.fillRect(17, 30, 7, 1);
-      ctx.fillStyle = '#9a6235';
-      ctx.fillRect(10, 25, 3, 1);
-      ctx.fillRect(19, 25, 3, 1);
-      ctx.fillRect(9, 29, 3, 1);
-      ctx.fillRect(18, 29, 3, 1);
-    };
-    const frontBody = () => {
-      ctx.fillStyle = '#9a2434';
-      ctx.fillRect(8, 13, 16, 3);
-      ctx.fillRect(7, 16, 18, 5);
-      ctx.fillRect(8, 21, 16, 5);
-      ctx.fillStyle = '#d64a5a';
-      ctx.fillRect(8, 13, 12, 1);
-      ctx.fillRect(7, 16, 4, 3);
-      ctx.fillRect(9, 14, 9, 2);
-      ctx.fillRect(9, 21, 3, 4);
-      ctx.fillStyle = '#7a1d2b';
-      ctx.fillRect(20, 14, 4, 2);
-      ctx.fillRect(21, 16, 4, 5);
-      ctx.fillRect(20, 21, 4, 5);
-      ctx.fillRect(8, 25, 16, 1);
-      ctx.fillStyle = '#245fd1';
-      ctx.fillRect(6, 15, 4, 7);
-      ctx.fillRect(22, 15, 4, 7);
-      ctx.fillStyle = '#f0b884';
-      ctx.fillRect(5, 21, 4, 4);
-      ctx.fillRect(23, 21, 4, 4);
-      ctx.fillStyle = '#153f91';
-      ctx.fillRect(10, 14, 12, 10);
-      ctx.fillStyle = '#245fd1';
-      ctx.fillRect(11, 15, 10, 7);
-      ctx.fillStyle = '#8fb8ff';
-      ctx.fillRect(13, 15, 2, 7);
-      ctx.fillRect(17, 15, 2, 7);
-      ctx.fillStyle = '#f1d36b';
-      ctx.fillRect(10, 21, 12, 2);
-      ctx.fillStyle = '#6b3b1f';
-      ctx.fillRect(9, 23, 14, 2);
-      ctx.fillStyle = '#ffd85c';
-      ctx.fillRect(15, 22, 2, 3);
-    };
-    const swordRight = () => {
-      // 刃 — 3px幅・青白い鋼
-      ctx.fillStyle = '#e8f0ff';
-      ctx.fillRect(26, 4, 3, 16);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(26, 4, 1, 15);   // 光沢ライン
-      ctx.fillStyle = '#8ab0d0';
-      ctx.fillRect(28, 5, 1, 15);   // 刃の影側
-      // ガード — 金色・幅8px
-      ctx.fillStyle = '#f5d000';
-      ctx.fillRect(23, 18, 8, 3);
-      ctx.fillStyle = '#b09800';
-      ctx.fillRect(23, 20, 8, 1);   // ガード下影
-      // グリップ
-      ctx.fillStyle = '#6b3b1f';
-      ctx.fillRect(26, 21, 3, 6);
-      ctx.fillStyle = '#3a2418';
-      ctx.fillRect(26, 22, 3, 1);   // 巻き革1
-      ctx.fillRect(26, 24, 3, 1);   // 巻き革2
-      // ポンメル — 金
-      ctx.fillStyle = '#f5d000';
-      ctx.fillRect(25, 27, 4, 2);
-    };
-    const faceFront = () => {
-      // 頭全体を2px上にシフト (y-2) → 2.5頭身に近づける
-      ctx.fillStyle = '#d7905c';
-      ctx.fillRect(14, 10, 4, 3);
-      ctx.fillStyle = '#f0b884';
-      ctx.fillRect(10, 4, 12, 8);
-      ctx.fillRect(11, 11, 10, 2);
-      ctx.fillStyle = '#ffd0a0';
-      ctx.fillRect(12, 5, 8, 5);
-      ctx.fillStyle = '#6f3416';
-      ctx.fillRect(9, 2, 14, 4);
-      ctx.fillRect(8, 5, 4, 5);
-      ctx.fillRect(20, 5, 4, 5);
-      ctx.fillStyle = '#5b2a12';
-      ctx.fillRect(19, 2, 4, 4);
-      ctx.fillRect(8, 8, 4, 2);
-      ctx.fillRect(20, 7, 4, 3);
-      ctx.fillStyle = '#b56a2a';
-      ctx.fillRect(10, 2, 6, 1);
-      ctx.fillRect(11, 3, 5, 1);
-      ctx.fillRect(9, 5, 3, 1);
-      ctx.fillRect(12, 5, 3, 2);
-      // 眉毛
-      ctx.fillStyle = '#3a1a06';
-      ctx.fillRect(11, 7, 3, 1);
-      ctx.fillRect(18, 7, 3, 1);
-      // 目 — 2x3px に拡大
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(12, 8, 2, 3);
-      ctx.fillRect(18, 8, 2, 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(12, 8, 1, 1);
-      ctx.fillRect(18, 8, 1, 1);
-      ctx.fillStyle = '#8c4d32';
-      ctx.fillRect(15, 10, 2, 1);
-    };
-    const drawDown = () => {
-      shadow();
-      boots();
-      frontBody();
-      swordRight();   // body の上に重ねて剣を目立たせる
-      faceFront();
-    };
-    const drawUp = () => {
-      shadow();
-      ctx.fillStyle = '#d7e0ea';
-      ctx.fillRect(4, 9, 2, 14);
-      ctx.fillStyle = '#8a5a25';
-      ctx.fillRect(3, 22, 5, 2);
-      boots();
-      ctx.fillStyle = '#7a1d2b';
-      ctx.fillRect(7, 13, 18, 13);
-      ctx.fillStyle = '#b83244';
-      ctx.fillRect(8, 13, 12, 2);
-      ctx.fillRect(8, 15, 4, 6);
-      ctx.fillRect(10, 22, 9, 3);
-      ctx.fillStyle = '#5e1722';
-      ctx.fillRect(21, 14, 4, 10);
-      ctx.fillRect(8, 24, 16, 2);
-      ctx.fillStyle = '#153f91';
-      ctx.fillRect(10, 15, 12, 9);
-      ctx.fillStyle = '#1f4fb3';
-      ctx.fillRect(11, 15, 8, 2);
-      ctx.fillRect(11, 17, 5, 6);
-      ctx.fillStyle = '#6fa0ff';
-      ctx.fillRect(11, 15, 4, 1);
-      ctx.fillRect(11, 16, 2, 5);
-      ctx.fillStyle = '#0f347f';
-      ctx.fillRect(19, 17, 3, 7);
-      ctx.fillRect(14, 22, 8, 2);
-      ctx.fillStyle = '#6b3b1f';
-      ctx.fillRect(9, 23, 14, 2);
-      ctx.fillStyle = '#9a6235';
-      ctx.fillRect(9, 23, 5, 1);
-      ctx.fillStyle = '#3a2418';
-      ctx.fillRect(18, 24, 5, 1);
-      ctx.fillStyle = '#6f3416';
-      ctx.fillRect(9, 5, 14, 8);
-      ctx.fillRect(8, 9, 16, 4);
-      ctx.fillStyle = '#5b2a12';
-      ctx.fillRect(20, 5, 3, 8);
-      ctx.fillRect(8, 11, 16, 2);
-      ctx.fillStyle = '#b56a2a';
-      ctx.fillRect(10, 5, 6, 1);
-      ctx.fillRect(11, 6, 5, 1);
-      ctx.fillRect(9, 9, 5, 1);
-      ctx.fillRect(10, 10, 4, 1);
-    };
-    const drawRight = () => {
-      shadow();
-      ctx.fillStyle = '#7a1d2b';
-      ctx.fillRect(8, 14, 14, 12);
-      ctx.fillStyle = '#b83244';
-      ctx.fillRect(10, 15, 10, 3);
-      swordRight();
-      boots();
-      ctx.fillStyle = '#153f91';
-      ctx.fillRect(11, 14, 11, 10);
-      ctx.fillStyle = '#245fd1';
-      ctx.fillRect(14, 15, 7, 7);
-      ctx.fillStyle = '#8fb8ff';
-      ctx.fillRect(18, 15, 2, 7);
-      ctx.fillStyle = '#6b3b1f';
-      ctx.fillRect(10, 23, 13, 2);
-      ctx.fillStyle = '#245fd1';
-      ctx.fillRect(22, 16, 4, 6);
-      ctx.fillStyle = '#f0b884';
-      ctx.fillRect(24, 21, 4, 4);
-      ctx.fillRect(12, 7, 10, 7);
-      ctx.fillRect(13, 13, 8, 2);
-      ctx.fillStyle = '#ffd0a0';
-      ctx.fillRect(16, 8, 5, 4);
-      ctx.fillStyle = '#6f3416';
-      ctx.fillRect(10, 4, 12, 4);
-      ctx.fillRect(9, 7, 5, 6);
-      ctx.fillRect(18, 7, 5, 4);
-      ctx.fillStyle = '#5b2a12';
-      ctx.fillRect(19, 4, 3, 4);
-      ctx.fillRect(9, 10, 5, 3);
-      ctx.fillRect(18, 9, 5, 2);
-      ctx.fillStyle = '#b56a2a';
-      ctx.fillRect(11, 4, 5, 1);
-      ctx.fillRect(12, 5, 4, 1);
-      ctx.fillRect(10, 7, 3, 1);
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(19, 10, 2, 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(19, 10, 1, 1);
-      ctx.fillStyle = '#8c4d32';
-      ctx.fillRect(19, 12, 2, 1);
-    };
-
-    if (dir === 'up') {
-      drawUp();
-    } else if (dir === 'left') {
-      ctx.save();
-      ctx.translate(32, 0);
-      ctx.scale(-1, 1);
-      drawRight();
-      ctx.restore();
-    } else if (dir === 'right') {
-      drawRight();
-    } else {
-      drawDown();
     }
 
     ctx.restore();
@@ -2454,6 +2251,7 @@ function getEntitySystemDeps() {
     drawChestEntity,
     resolveEntityDrawSize,
     openSignRead,
+    playSE,
 
     makeHouseHitbox,
     drawHouseEntity,
@@ -2666,6 +2464,7 @@ function placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exit
         const { spawnX, spawnY, exitDir } = destination;
 
     placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exitDir);
+    playSE('open_door');
     finishMapTransition(transition, entranceEntity);
   }
 
@@ -3240,6 +3039,7 @@ function refreshStatusBar() {
 
   function setGameState(nextState) {
     currentState = nextState;
+    
     if (nextState !== GameState.MAP) {
       keys.up = keys.down = keys.left = keys.right = false;
       hero.vx = 0;
@@ -3248,6 +3048,60 @@ function refreshStatusBar() {
     }
     if (nextState === GameState.MAP || nextState === GameState.PROLOGUE || nextState === GameState.TALK || nextState === GameState.SHOP || nextState === GameState.EQUIP || nextState === GameState.WIN || nextState === GameState.ENDING) {
       hideBtns();
+    }
+  }
+
+  function getMapBGMKey() {
+    if (runtimeState.currentMap === townMap) return 'town_theme';
+    if (runtimeState.currentMap === shadowTownMap) return 'town_theme';
+    if (runtimeState.currentMap === outpostMap) return 'town_theme';
+    if (isHouseMap(runtimeState.currentMap)) return 'town_theme';
+    if (runtimeState.currentMap === dungeonMap) return 'dungeon_theme';
+    if (runtimeState.currentMap === castleMap) return 'dungeon_theme';
+    if (
+      runtimeState.currentMap === fieldMap ||
+      runtimeState.currentMap === field2Map ||
+      runtimeState.currentMap === cursedForestMap ||
+      runtimeState.currentMap === leafaForestMap
+    ) {
+      return 'field_theme';
+    }
+
+    return 'field_theme';
+  }
+
+  function getBattleBGMKey() {
+    const mainEnemy = getMainBattleEnemy();
+
+    if (mainEnemy?.defId === 'demon_lord' || currentBattleBgKey === 'demon_king') {
+      return 'final_boss_battle';
+    }
+
+    if (mainEnemy?.boss || currentBattleBgKey === 'dark_knight' || currentBattleBgKey === 'forest_boss' || currentBattleBgKey === 'castle_bg') {
+      return 'boss_battle';
+    }
+
+    return 'normal_battle';
+  }
+
+  function updateBGMForCurrentState() {
+    if (currentState === GameState.LOSE) {
+      stopBGM();
+      return;
+    }
+
+    if (currentState === GameState.TITLE || currentState === GameState.PROLOGUE || currentState === GameState.ENDING || currentState === GameState.WIN) {
+      playBGM('title_theme');
+      return;
+    }
+
+    if (currentState === GameState.BATTLE) {
+      playBGM(getBattleBGMKey());
+      return;
+    }
+
+    if (currentState === GameState.MAP || currentState === GameState.TALK || currentState === GameState.SHOP || currentState === GameState.EQUIP) {
+      playBGM(getMapBGMKey());
     }
   }
 
@@ -3392,6 +3246,7 @@ function drawCurrentState() {
   function loop() {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
     updateCurrentState();
+    updateBGMForCurrentState();
     refreshStatusBar();
     drawCurrentState();
     requestAnimationFrame(loop); // 次のフレームへ
@@ -3467,35 +3322,51 @@ function getShopOptions() {
 }
 
 function buyPotion() {
-  return buyPotionSystem(getShopSystemDeps());
+  const ok = buyPotionSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buyEther() {
-  return buyEtherSystem(getShopSystemDeps());
+  const ok = buyEtherSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buyElixir() {
-  return buyElixirSystem(getShopSystemDeps());
+  const ok = buyElixirSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buySteelSword() {
-  return buySteelSwordSystem(getShopSystemDeps());
+  const ok = buySteelSwordSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buyIronArmor() {
-  return buyIronArmorSystem(getShopSystemDeps());
+  const ok = buyIronArmorSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buyLeatherArmor() {
-  return buyLeatherArmorSystem(getShopSystemDeps());
+  const ok = buyLeatherArmorSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buyMageStaff() {
-  return buyMageStaffSystem(getShopSystemDeps());
+  const ok = buyMageStaffSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 function buyGreenRobe() {
-  return buyGreenRobeSystem(getShopSystemDeps());
+  const ok = buyGreenRobeSystem(getShopSystemDeps());
+  playSE(ok ? 'buy' : 'error');
+  return ok;
 }
 
 
@@ -3938,32 +3809,32 @@ function openSignRead(sign) {
     if (actionId === 'run')    { doRun(); return; }
 
     if (actionId === 'fire') {
-      if (actorObj.mp < FIRE_MP_COST) { msg = 'MPが　たりない！'; return; }
+      if (actorObj.mp < FIRE_MP_COST) { msg = 'MPが　たりない！'; playSE('error'); return; }
       collectActorAction(actorEntry, 'fire');
       return;
     }
     if (actionId === 'heal') {
-      if (actorObj.mp < HEAL_MP_COST) { msg = `${actorObj.name}の　MPが　たりない！`; return; }
+      if (actorObj.mp < HEAL_MP_COST) { msg = `${actorObj.name}の　MPが　たりない！`; playSE('error'); return; }
       beginPartyTargetSelectionForActor(actorEntry, 'heal');
       return;
     }
     if (actionId === 'leafStorm') {
-      if (actorObj.mp < LEAF_STORM_MP_COST) { msg = `${actorObj.name}の　MPが　たりない！`; return; }
+      if (actorObj.mp < LEAF_STORM_MP_COST) { msg = `${actorObj.name}の　MPが　たりない！`; playSE('error'); return; }
       collectActorAction(actorEntry, 'leafStorm');
       return;
     }
     if (actionId === 'potion') {
-      if (getItemCount('potion') <= 0) { msg = 'ポーションを持っていない！'; return; }
+      if (getItemCount('potion') <= 0) { msg = 'ポーションを持っていない！'; playSE('error'); return; }
       beginPartyTargetSelectionForActor(actorEntry, 'potion');
       return;
     }
     if (actionId === 'ether') {
-      if (getItemCount('ether') <= 0) { msg = 'エーテルを持っていない！'; return; }
+      if (getItemCount('ether') <= 0) { msg = 'エーテルを持っていない！'; playSE('error'); return; }
       beginPartyTargetSelectionForActor(actorEntry, 'ether');
       return;
     }
     if (actionId === 'elixir') {
-      if (getItemCount('elixir') <= 0) { msg = 'エリクサーを持っていない！'; return; }
+      if (getItemCount('elixir') <= 0) { msg = 'エリクサーを持っていない！'; playSE('error'); return; }
       beginPartyTargetSelectionForActor(actorEntry, 'elixir');
       return;
     }
@@ -4207,6 +4078,7 @@ function openSignRead(sign) {
       setTimeout(processNextBattleActor, 600);
       return;
     }
+    playSE('attack_slash');
     const atk = actorObj === hero ? getHeroAttack() : getAllyAttack(actorObj);
     const dmg = Math.max(1, atk - enemy.def + rng(0, 1));
     if (actorObj === hero) {
@@ -4229,6 +4101,7 @@ function openSignRead(sign) {
       console.log('[attack] hitburst');
     }
     enemy.hp = Math.max(0, enemy.hp - dmg);
+    playSE('attack_hit');
     afterPartyAction([enemy]);
   }
 
@@ -4288,6 +4161,7 @@ function openSignRead(sign) {
     target.hp += healAmt;
     const targetName = getTargetDisplayName(target);
     msg = `${actorObj.name}の　かいふく！　${targetName}のHPが ${healAmt} 回復！`;
+    playSE('heal');
     if (currentState === GameState.BATTLE) spawnHealEffect(target, healAmt, 0);
     afterPartyAction([]);
   }
@@ -4304,7 +4178,12 @@ function openSignRead(sign) {
     msg = result.ok
       ? `${casterName}が　ポーションを使った！　${targetMember.name}のHPが ${result.healed} 回復！`
       : result.message;
-    if (result.ok && currentState === GameState.BATTLE) spawnHealEffect(targetMember.actor, result.healed, 0);
+    if (result.ok) {
+      playSE('heal');
+      if (currentState === GameState.BATTLE) spawnHealEffect(targetMember.actor, result.healed, 0);
+    } else {
+      playSE('error');
+    }
     afterPartyAction([]);
   }
 
@@ -4320,7 +4199,12 @@ function openSignRead(sign) {
     msg = result.ok
       ? `${casterName}が　エーテルを使った！　${targetMember.name}のMPが ${result.recovered} 回復！`
       : result.message;
-    if (result.ok && currentState === GameState.BATTLE) spawnHealEffect(targetMember.actor, 0, result.recovered);
+    if (result.ok) {
+      playSE('heal');
+      if (currentState === GameState.BATTLE) spawnHealEffect(targetMember.actor, 0, result.recovered);
+    } else {
+      playSE('error');
+    }
     afterPartyAction([]);
   }
 
@@ -4336,7 +4220,12 @@ function openSignRead(sign) {
     msg = result.ok
       ? `${casterName}が　エリクサーを使った！　${targetMember.name}のHP+${result.healedHp}、MP+${result.healedMp}回復！`
       : result.message;
-    if (result.ok && currentState === GameState.BATTLE) spawnHealEffect(targetMember.actor, result.healedHp, result.healedMp);
+    if (result.ok) {
+      playSE('heal');
+      if (currentState === GameState.BATTLE) spawnHealEffect(targetMember.actor, result.healedHp, result.healedMp);
+    } else {
+      playSE('error');
+    }
     afterPartyAction([]);
   }
 
@@ -4488,6 +4377,7 @@ function openSignRead(sign) {
       triggerPartyHitEffect(target, damage);
       hits.push({ target, damage });
     }
+    if (hits.length > 0) playSE('attack_hit');
     return hits;
   }
 
@@ -4569,6 +4459,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, Math.floor(enemy.atk * 0.9) - def + rng(-1, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       const tName = target === hero ? 'ゆうしゃ' : target.name;
       msg = `${enemy.name}の　${spellName}！　${tName}に ${dmg} のダメージ！`;
     }
@@ -4593,6 +4484,7 @@ function openSignRead(sign) {
     const dmg = Math.max(1, enemy.atk - getTargetDefense(target) + rng(-1, 3));
     target.hp  = Math.max(0, target.hp - dmg);
     triggerPartyHitEffect(target, dmg);
+    playSE('attack_hit');
     const tName = target === hero ? 'ゆうしゃ' : target.name;
     msg = `${enemy.name}の　こうげき！　${tName}に ${dmg} のダメージ！`;
     if (isPartyDefeated()) {
@@ -4618,6 +4510,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, enemy.atk - def + rng(-1, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       msg = `${enemy.name}の　こうげき！　${dmg} のダメージ！`;
       finishEnemyAction();
       return;
@@ -4628,6 +4521,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, Math.floor(enemy.atk * 1.25) - def + rng(0, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       msg = `${enemy.name}の　根の一撃！　${dmg} のダメージ！`;
       finishEnemyAction();
       return;
@@ -4653,6 +4547,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, enemy.atk - def + rng(-1, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       msg = `${enemy.name}の　こうげき！　${dmg} のダメージ！`;
     } else if (roll < 0.85) {
       const target = getRandomLivePartyMember();
@@ -4660,6 +4555,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, Math.floor(enemy.atk * 1.45) - def + rng(-1, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       msg = `${enemy.name}の　大剣の一撃！　${dmg} のダメージ！`;
     } else {
       const targets = getBattlePartyTargets({ aliveOnly: true });
@@ -4758,6 +4654,7 @@ function openSignRead(sign) {
     }
     target.hp = Math.max(0, target.hp - dmg);
     triggerPartyHitEffect(target, dmg);
+    playSE('attack_hit');
     if (isPartyDefeated()) {
       setTimeout(() => { setGameState(GameState.LOSE); }, 1000);
       return;
@@ -4782,6 +4679,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, enemy.atk - def + rng(-1, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       const tName = target === hero ? 'ゆうしゃ' : target.name;
       msg = `${enemy.name}の　こうげき！　${tName}に ${dmg} のダメージ！`;
     } else {
@@ -4790,6 +4688,7 @@ function openSignRead(sign) {
       const dmg = Math.max(1, Math.floor(enemy.atk * 1.25) - def + rng(-1, 3));
       target.hp = Math.max(0, target.hp - dmg);
       triggerPartyHitEffect(target, dmg);
+      playSE('attack_hit');
       const tName = target === hero ? 'ゆうしゃ' : target.name;
       msg = `${enemy.name}の　闇の斬撃！　${tName}に ${dmg} のダメージ！`;
     }
@@ -5237,4 +5136,6 @@ function handleTalkInput(e) {
   // ============================================================
   loadTileImages();   // tiles/ フォルダの画像を非同期ロード開始
   loadSpriteImages(); // sprites/ フォルダの画像を非同期ロード開始
+  loadSE();           // assets/audio/se/ フォルダの効果音を非同期ロード開始
+  loadBGM();          // assets/audio/bgm/ フォルダのBGMを非同期ロード開始
   loop();   

@@ -5,6 +5,7 @@ export function handleTitleInput(event, deps) {
     setTitleMenuIndex,
     isConfirmKey,
     startTitleMenuAction,
+    playSE = () => {},
   } = deps;
 
   if (
@@ -21,6 +22,7 @@ export function handleTitleInput(event, deps) {
       (currentIndex + delta + TITLE_MENU_ITEMS.length) % TITLE_MENU_ITEMS.length;
 
     setTitleMenuIndex(nextIndex);
+    playSE('cursor');
     return;
   }
 
@@ -30,6 +32,7 @@ export function handleTitleInput(event, deps) {
     const selectedItem = TITLE_MENU_ITEMS[getTitleMenuIndex()];
 
     if (selectedItem) {
+      playSE('confirm');
       startTitleMenuAction(selectedItem.action);
     }
   }

@@ -87,6 +87,7 @@ rpg/
 | `chestSystem.js` | 宝箱インタラクション（開封判定・アイテム付与・フラグ管理） |
 | `npcEventSystem.js` | NPC 接触・会話開始・ストーリーフラグ変更ロジック |
 | `encounterSystem.js` | エンカウント発生判定・テーブル選択の統合 |
+| `audioSystem.js` | SE/BGM 再生管理（`assets/audio/se/` と `assets/audio/bgm/` のロード、共通音量、ミュート、イベント再生）。BGM は現在、ゲーム状態とマップに応じて切り替える |
 
 #### 最近分割された（重要）
 

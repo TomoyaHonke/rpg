@@ -9,6 +9,7 @@ export function makeChestEntity(x, y, options = {}, deps) {
     grantChestRewards,
     showNotice,
     drawChestEntity,
+    playSE = () => {},
   } = deps;
 
   const id = options.id || `chest_${x}_${y}`;
@@ -43,6 +44,8 @@ export function makeChestEntity(x, y, options = {}, deps) {
       flags[flagKey] = true;
 
       const rewardMessages = grantChestRewards(this);
+      playSE('open_chest');
+      if (rewardMessages.length > 0) playSE('item_get');
       showNotice(['宝箱を開けた！', ...rewardMessages].join(' '));
     },
   };

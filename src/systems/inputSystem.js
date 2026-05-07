@@ -139,6 +139,7 @@ export function handleMapInput(event, deps) {
     openEquipMenu,
     getAdjacentInteractable,
     getAdjacentBoss,
+    playSE = () => {},
   } = deps;
 
   if (event.key === 'e' || event.key === 'E') {
@@ -158,10 +159,14 @@ export function handleMapInput(event, deps) {
     const adj = getAdjacentInteractable();
 
     if (adj) {
+      playSE('confirm');
       adj.interact();
     } else {
       const boss = getAdjacentBoss();
-      if (boss) boss.interact();
+      if (boss) {
+        playSE('confirm');
+        boss.interact();
+      }
     }
 
     return true;
@@ -189,6 +194,7 @@ export function handleBattleInput(event, deps) {
     heroTurn,
     moveBattleCommand,
     confirmBattleCommand,
+    playSE = () => {},
   } = deps;
 
   if (battleIntro.active && isConfirmKey(event)) {
@@ -204,24 +210,28 @@ export function handleBattleInput(event, deps) {
   if (battleTargetMode) {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
       event.preventDefault();
+      playSE('cursor');
       moveTargetSelection(-1);
       return true;
     }
 
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
       event.preventDefault();
+      playSE('cursor');
       moveTargetSelection(1);
       return true;
     }
 
     if (isConfirmKey(event)) {
       event.preventDefault();
+      playSE('confirm');
       confirmTargetSelection();
       return true;
     }
 
     if (isCancelKey(event)) {
       event.preventDefault();
+      playSE('cancel');
       cancelTargetSelection();
       return true;
     }
@@ -231,6 +241,7 @@ export function handleBattleInput(event, deps) {
 
   if (battleVictory.active && isConfirmKey(event)) {
     event.preventDefault();
+    playSE('talk_next');
     advanceBattleVictory();
     return true;
   }
@@ -238,18 +249,21 @@ export function handleBattleInput(event, deps) {
   if (heroTurn && !battleVictory.active && !battleVictory.pending) {
     if (event.key === 'ArrowUp') {
       event.preventDefault();
+      playSE('cursor');
       moveBattleCommand(-1);
       return true;
     }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault();
+      playSE('cursor');
       moveBattleCommand(1);
       return true;
     }
 
     if (isConfirmKey(event)) {
       event.preventDefault();
+      playSE('confirm');
       confirmBattleCommand();
       return true;
     }
@@ -265,28 +279,33 @@ export function handleShopInput(event, deps) {
     moveShopCursor,
     confirmShopChoice,
     closeShop,
+    playSE = () => {},
   } = deps;
 
   if (event.key === 'ArrowUp') {
     event.preventDefault();
+    playSE('cursor');
     moveShopCursor(-1);
     return true;
   }
 
   if (event.key === 'ArrowDown') {
     event.preventDefault();
+    playSE('cursor');
     moveShopCursor(1);
     return true;
   }
 
   if (isConfirmKey(event)) {
     event.preventDefault();
+    playSE('confirm');
     confirmShopChoice();
     return true;
   }
 
   if (isCancelKey(event)) {
     event.preventDefault();
+    playSE('cancel');
     closeShop();
     return true;
   }
@@ -298,11 +317,13 @@ export function handleTalkInput(event, deps) {
   const {
     isConfirmKey,
     advanceDialogue,
+    playSE = () => {},
   } = deps;
 
   // 元の挙動維持：Space・Enter・Z・Escape で進める
   if (isConfirmKey(event) || event.key === 'Escape') {
     event.preventDefault();
+    playSE('talk_next');
     advanceDialogue();
     return true;
   }
