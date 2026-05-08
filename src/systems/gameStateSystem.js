@@ -55,6 +55,7 @@ export function resetBattleAndUiState(deps) {
       pending: false,
       messages: [],
       index: 0,
+      playedJingle: false,
     },
   });
 

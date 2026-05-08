@@ -23,6 +23,7 @@ export function createInitialBattleVictory() {
     pending: false,
     messages: [],
     index: 0,
+    playedJingle: false,
   };
 }
 

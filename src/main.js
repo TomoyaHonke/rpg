@@ -227,15 +227,14 @@ import {
   loadSE,
   playSE,
   loadBGM,
-  playBGM,
-  stopBGM,
+  fadeToBGM,
+  fadeOutBGM,
   setSEVolume,
   setBGMVolume,
   muteSE,
   muteBGM,
   unmuteSE,
   unmuteBGM,
-  getCurrentBGMKey,
 } from './systems/audioSystem.js';
 
 import {
@@ -2431,6 +2430,22 @@ function placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exit
   setHeroDirection(exitDir);
 }
 
+function isDungeonTransitionMap(map) {
+  return map === dungeonMap || map === castleMap;
+}
+
+function getMapTransitionSEKey(fromMap, toMap) {
+  if (isDungeonTransitionMap(fromMap) || isDungeonTransitionMap(toMap)) {
+    return 'dungeon_transition_step';
+  }
+
+  if (isHouseMap(fromMap) || isHouseMap(toMap)) {
+    return 'open_door';
+  }
+
+  return 'map_transition_step';
+}
+
   function executeMapTransition(transitionId, entranceEntity = null) {
     const attempt = resolveTransitionAttemptSystem(
         transitionId,
@@ -2444,6 +2459,8 @@ function placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exit
 
     const transition = attempt.transition;
 
+
+    const fromMap = runtimeState.currentMap;
 
     if (typeof transition.onBefore === 'function') transition.onBefore(entranceEntity);
 
@@ -2464,7 +2481,7 @@ function placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exit
         const { spawnX, spawnY, exitDir } = destination;
 
     placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exitDir);
-    playSE('open_door');
+    playSE(getMapTransitionSEKey(fromMap, destination.toMap));
     finishMapTransition(transition, entranceEntity);
   }
 
@@ -3053,16 +3070,15 @@ function refreshStatusBar() {
 
   function getMapBGMKey() {
     if (runtimeState.currentMap === townMap) return 'town_theme';
-    if (runtimeState.currentMap === shadowTownMap) return 'town_theme';
+    if (runtimeState.currentMap === shadowTownMap) return 'shadow_town_theme';
     if (runtimeState.currentMap === outpostMap) return 'town_theme';
     if (isHouseMap(runtimeState.currentMap)) return 'town_theme';
     if (runtimeState.currentMap === dungeonMap) return 'dungeon_theme';
-    if (runtimeState.currentMap === castleMap) return 'dungeon_theme';
+    if (runtimeState.currentMap === castleMap) return 'castle_theme';
+    if (runtimeState.currentMap === cursedForestMap || runtimeState.currentMap === leafaForestMap) return 'cursed_forest_theme';
     if (
       runtimeState.currentMap === fieldMap ||
-      runtimeState.currentMap === field2Map ||
-      runtimeState.currentMap === cursedForestMap ||
-      runtimeState.currentMap === leafaForestMap
+      runtimeState.currentMap === field2Map
     ) {
       return 'field_theme';
     }
@@ -3086,22 +3102,32 @@ function refreshStatusBar() {
 
   function updateBGMForCurrentState() {
     if (currentState === GameState.LOSE) {
-      stopBGM();
+      fadeOutBGM(600);
       return;
     }
 
-    if (currentState === GameState.TITLE || currentState === GameState.PROLOGUE || currentState === GameState.ENDING || currentState === GameState.WIN) {
-      playBGM('title_theme');
+    if (currentState === GameState.TITLE || currentState === GameState.PROLOGUE) {
+      fadeToBGM('title_theme', 800);
+      return;
+    }
+
+    if (currentState === GameState.ENDING || currentState === GameState.WIN) {
+      fadeToBGM('title_theme', 800);
       return;
     }
 
     if (currentState === GameState.BATTLE) {
-      playBGM(getBattleBGMKey());
+      if (battleVictory.active || battleVictory.pending) {
+        fadeOutBGM(500);
+        return;
+      }
+
+      fadeToBGM(getBattleBGMKey(), 500);
       return;
     }
 
     if (currentState === GameState.MAP || currentState === GameState.TALK || currentState === GameState.SHOP || currentState === GameState.EQUIP) {
-      playBGM(getMapBGMKey());
+      fadeToBGM(getMapBGMKey(), 800);
     }
   }
 
@@ -3537,7 +3563,7 @@ function openSignRead(sign) {
     setBattleEnemies(enemies);
     clearFireEffectsUI();
     clearBattleMessageQueue();
-    battleVictory       = { active: false, pending: false, messages: [], index: 0 };
+    battleVictory       = { active: false, pending: false, messages: [], index: 0, playedJingle: false };
     battleTurnQueue     = [];
     pendingPartyActions = [];
     battlePartyQueue    = [];
@@ -3767,10 +3793,19 @@ function openSignRead(sign) {
   }
 
   function startBattleVictory(messages) {
-    battleVictory = { active: true, pending: false, messages: messages.filter(Boolean), index: 0 };
+    battleVictory = { active: true, pending: false, messages: messages.filter(Boolean), index: 0, playedJingle: false };
     heroTurn = false;
     msg = battleVictory.messages[0] || '勝利した！';
+    playBattleVictoryJingleOnce();
     showBtns(true);
+  }
+
+  function playBattleVictoryJingleOnce() {
+    if (!battleVictory.active || battleVictory.playedJingle) return;
+    const currentMessage = battleVictory.messages[battleVictory.index] || msg;
+    if (!currentMessage.includes('倒した！')) return;
+    playSE('victory_jingle');
+    battleVictory.playedJingle = true;
   }
 
   function advanceBattleVictory() {
@@ -4107,6 +4142,7 @@ function openSignRead(sign) {
 
   function executeActorFire(actorObj) {
     actorObj.mp -= FIRE_MP_COST;
+    playSE('magic_fire');
     const targets = liveEnemies();
     let totalDmg = 0;
     const atk = actorObj === hero ? getHeroAttack() : getAllyAttack(actorObj);
@@ -4127,6 +4163,7 @@ function openSignRead(sign) {
 
   function executeActorLeafStorm(actorObj) {
     actorObj.mp -= LEAF_STORM_MP_COST;
+    playSE('leaf_storm');
     const targets = liveEnemies();
     let totalDmg = 0;
     const atk = actorObj === hero ? getHeroAttack() : getAllyAttack(actorObj);
@@ -4244,6 +4281,7 @@ function openSignRead(sign) {
   function queueBattleVictory() {
     if (battleVictory.pending || battleVictory.active) return;
     battleVictory.pending = true;
+    fadeOutBGM(500);
     setTimeout(resolveBattleVictory, 900);
   }
 
@@ -5098,7 +5136,7 @@ function handleTalkInput(e) {
     selectedTargetIndex = 0;
     clearBattleIntro();
     winMsg   = '';
-    battleVictory = { active: false, pending: false, messages: [], index: 0 };
+    battleVictory = { active: false, pending: false, messages: [], index: 0, playedJingle: false };
     clearFireEffectsUI(); clearLeafEffectsUI(); clearSlashEffectsUI(); clearHitEffectsUI();
     clearBattleMessageQueue();
     hideBtns();
