@@ -8,6 +8,9 @@ export function isBlockedTile(x, y, deps) {
     mapCols,
     mapRows,
     TILE_META,
+    TILE_RENDER,
+    syncEntities,
+    entities,
   } = deps;
 
   if (x < 0 || x >= mapCols() || y < 0 || y >= mapRows()) {
@@ -16,7 +19,56 @@ export function isBlockedTile(x, y, deps) {
 
   const tile = tileAt(currentMap, x, y);
 
+  if (
+    TILE_META[tile]
+    && !TILE_META[tile].passable
+    && hasWalkableObjectAtTile(x, y, { TILE_RENDER, syncEntities, entities })
+  ) {
+    return false;
+  }
+
   return TILE_META[tile] ? !TILE_META[tile].passable : false;
+}
+
+function hasWalkableObjectAtTile(x, y, deps) {
+  const {
+    TILE_RENDER,
+    syncEntities,
+    entities,
+  } = deps;
+
+  if (!TILE_RENDER || typeof syncEntities !== 'function' || !Array.isArray(entities)) return false;
+
+  syncEntities();
+
+  const tileRect = {
+    x: x * TILE_RENDER,
+    y: y * TILE_RENDER,
+    w: TILE_RENDER,
+    h: TILE_RENDER,
+  };
+
+  return entities.some(entity => {
+    if (entity.type !== 'decor' || !entity.walkable) return false;
+
+    const hitbox = entity.walkbox || entity.hitbox || {
+      x: 0,
+      y: 0,
+      w: entity.w,
+      h: entity.h,
+    };
+    const walkRect = {
+      x: entity.x + hitbox.x,
+      y: entity.y + hitbox.y,
+      w: hitbox.w,
+      h: hitbox.h,
+    };
+
+    return tileRect.x < walkRect.x + walkRect.w
+      && tileRect.x + tileRect.w > walkRect.x
+      && tileRect.y < walkRect.y + walkRect.h
+      && tileRect.y + tileRect.h > walkRect.y;
+  });
 }
 
 export function canPlaceHeroAt(px, py, deps) {

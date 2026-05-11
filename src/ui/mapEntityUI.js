@@ -323,17 +323,29 @@ export function drawObject(ctx, kind, px, py, drawW, drawH, object = {}, deps) {
   } = deps;
 
   const imgKey = getDecorImageKey(kind);
-  const img = tileImgs[imgKey];
+  const objectImg = objectImgs[imgKey];
+  const drawImage = img => {
+    if (object.flipX === true) {
+      ctx.save();
+      ctx.translate(px + drawW, py);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0, drawW, drawH);
+      ctx.restore();
+      return;
+    }
 
-  if (img && img._ready) {
     ctx.drawImage(img, px, py, drawW, drawH);
+  };
+
+  if (objectImg && objectImg._ready) {
+    drawImage(objectImg);
     return;
   }
 
-  const objectImg = objectImgs[imgKey];
+  const img = tileImgs[imgKey];
 
-  if (objectImg && objectImg._ready) {
-    ctx.drawImage(objectImg, px, py, drawW, drawH);
+  if (img && img._ready) {
+    drawImage(img);
     return;
   }
 

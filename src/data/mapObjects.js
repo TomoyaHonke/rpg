@@ -5,7 +5,13 @@ import {
 import {
   TOWN_HOUSES,
   SHADOW_TOWN_HOUSES,
+  leafaForestMap,
+  ruinedCityMap,
+  townMap,
+  westTownMap,
 } from './maps.js';
+
+import { WEST_TOWN_NPCS } from './npcs.js';
 
 export const HOUSE_TRANSITION_IDS = {
   west: 'enterHouseWest',
@@ -18,73 +24,678 @@ export const HOUSE_TRANSITION_IDS = {
   shadow_shop: 'enterShadowShop',
 };
 
+function createTownOuterExitEntrances() {
+  const rows = townMap.length;
+  const cols = townMap[0]?.length || 0;
+  const entrances = [];
+  const makeTownExit = (x, y, townExitSide) => ({
+    type: 'townExit',
+    x,
+    y,
+    w: TILE_RENDER,
+    h: TILE_RENDER,
+    exitDir: townExitSide,
+    transitionId: 'exitTown',
+    options: { townExitSide },
+  });
+
+  for (let x = 0; x < cols; x++) {
+    entrances.push(makeTownExit(x, 0, 'up'));
+    entrances.push(makeTownExit(x, rows - 1, 'down'));
+  }
+
+  for (let y = 1; y < rows - 1; y++) {
+    entrances.push(makeTownExit(0, y, 'left'));
+    entrances.push(makeTownExit(cols - 1, y, 'right'));
+  }
+
+  return entrances;
+}
+
+function createWestTownOuterExitEntrances() {
+  const rows = westTownMap.length;
+  const cols = westTownMap[0]?.length || 0;
+  const entrances = [];
+  const makeWestTownExit = (x, y, westTownExitSide) => ({
+    type: 'westTownExit',
+    x,
+    y,
+    w: TILE_RENDER,
+    h: TILE_RENDER,
+    exitDir: westTownExitSide,
+    transitionId: 'exitWestTown',
+    options: { westTownExitSide },
+  });
+
+  for (let x = 0; x < cols; x++) {
+    entrances.push(makeWestTownExit(x, 0, 'up'));
+    entrances.push(makeWestTownExit(x, rows - 1, 'down'));
+  }
+
+  for (let y = 1; y < rows - 1; y++) {
+    entrances.push(makeWestTownExit(cols - 1, y, 'right'));
+  }
+
+  return entrances;
+}
+
+function createLeafaForestBorderTrees() {
+  const rows = leafaForestMap.length;
+  const cols = leafaForestMap[0]?.length || 0;
+  const trees = [];
+  const seen = new Set();
+  const exitGapStart = 18;
+  const exitGapEnd = 21;
+  const treeOptions = {
+    blocking: true,
+    hitbox: { x: 18, y: 64, w: 28, h: 28 },
+  };
+  const addTree = (x, y) => {
+    if (y >= rows - 2 && x >= exitGapStart && x <= exitGapEnd) return;
+
+    const key = `${x},${y}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    trees.push({
+      kind: 'tree',
+      x,
+      y,
+      scale: (x + y) % 3 === 0 ? 1.05 : ((x + y) % 3 === 1 ? 0.95 : 1),
+      flipX: (x + y) % 2 === 0,
+      options: treeOptions,
+    });
+  };
+
+  for (let x = 0; x < cols; x++) {
+    addTree(x, 0);
+    addTree(x, 1);
+    addTree(x, rows - 2);
+    addTree(x, rows - 1);
+  }
+
+  for (let y = 2; y < rows - 2; y++) {
+    addTree(0, y);
+    addTree(1, y);
+    addTree(cols - 2, y);
+    addTree(cols - 1, y);
+  }
+
+  return trees;
+}
+
+function createLeafaForestMazeTrees() {
+  const treeOptions = {
+    blocking: true,
+    hitbox: { x: 18, y: 64, w: 28, h: 28 },
+  };
+  const trees = [];
+  const seen = new Set();
+  const protectedTiles = new Set([
+    '20,4',
+    '20,3',
+    '22,4',
+    '18,4',
+    '20,40',
+    '18,41',
+    '19,41',
+    '20,41',
+    '21,41',
+  ]);
+  const isClearing = (x, y) => x >= 16 && x <= 24 && y >= 2 && y <= 8;
+  const addTree = (x, y) => {
+    if (isClearing(x, y) || protectedTiles.has(`${x},${y}`)) return;
+
+    const key = `${x},${y}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    trees.push({
+      kind: 'tree',
+      x,
+      y,
+      scale: (x * 2 + y) % 4 === 0 ? 1.05 : ((x + y) % 4 === 0 ? 0.95 : 1),
+      flipX: (x + y) % 2 === 1,
+      options: treeOptions,
+    });
+  };
+  const addH = (y, x1, x2, gaps = []) => {
+    for (let x = x1; x <= x2; x++) {
+      if (gaps.some(([from, to]) => x >= from && x <= to)) continue;
+      addTree(x, y);
+    }
+  };
+  const addV = (x, y1, y2, gaps = []) => {
+    for (let y = y1; y <= y2; y++) {
+      if (gaps.some(([from, to]) => y >= from && y <= to)) continue;
+      addTree(x, y);
+    }
+  };
+
+  addH(38, 4, 35, [[19, 22], [6, 8]]);
+  addV(12, 31, 38, [[35, 36]]);
+  addV(28, 31, 38, [[33, 34]]);
+  addH(32, 5, 34, [[11, 13], [27, 29]]);
+  addH(28, 2, 27, [[7, 9], [20, 22]]);
+  addV(7, 22, 31, [[27, 28]]);
+  addV(32, 21, 32, [[25, 26]]);
+  addH(22, 7, 36, [[17, 20], [30, 32]]);
+  addV(18, 15, 23, [[18, 19]]);
+  addV(25, 13, 23, [[20, 21]]);
+  addH(14, 4, 31, [[12, 15], [19, 22]]);
+  addH(10, 2, 16, [[10, 12]]);
+  addH(10, 24, 37, [[30, 32]]);
+  addV(10, 7, 14, [[11, 12]]);
+  addV(30, 7, 14, [[10, 11]]);
+
+  addH(34, 4, 11, [[7, 8]]);
+  addV(34, 24, 30, [[27, 28]]);
+  addH(26, 12, 18, [[15, 16]]);
+  addH(18, 3, 12, [[5, 6]]);
+  addH(36, 14, 22, [[18, 19]]);
+  addV(14, 34, 37, [[35, 35]]);
+  addV(22, 34, 37, [[35, 35]]);
+  addH(24, 20, 29, [[23, 24]]);
+  addV(20, 23, 27, [[25, 25]]);
+  addV(29, 23, 27, [[25, 25]]);
+  addH(18, 28, 35, [[31, 32]]);
+  addV(28, 16, 20, [[18, 18]]);
+  addV(35, 16, 20, [[18, 18]]);
+  [
+    [22, 38],
+    [11, 37],
+    [13, 37],
+    [15, 37],
+    [21, 37],
+    [23, 37],
+    [27, 37],
+    [29, 37],
+    [11, 33],
+    [6, 31],
+    [8, 31],
+    [31, 31],
+    [33, 31],
+    [6, 29],
+    [7, 28],
+    [20, 28],
+    [19, 27],
+    [8, 23],
+    [21, 23],
+    [24, 23],
+    [26, 23],
+    [28, 23],
+    [33, 23],
+    [20, 22],
+    [33, 21],
+    [29, 19],
+    [34, 19],
+    [29, 17],
+    [34, 17],
+    [17, 15],
+  ].forEach(([x, y]) => addTree(x, y));
+
+  return trees;
+}
+
 export const HOUSE_EXIT_ENTRANCES = [
     {
       type: 'houseExit',
-      x: 3,
-      y: 5,
-      w: TILE_RENDER * 2,
+      x: 15,
+      y: 21,
+      w: TILE_RENDER * 3,
       h: TILE_RENDER,
       exitDir: 'down',
       transitionId: 'exitHouse',
-      options: { hitbox: { x: 0, y: 0, w: TILE_RENDER * 2, h: TILE_RENDER } },
+      options: { hitbox: { x: 0, y: 0, w: TILE_RENDER * 3, h: TILE_RENDER } },
     },
   ];
 
 export const MAP_OBJECTS = {
   field: {
     decorations: [
-      { kind: 'flower', x: 8, y: 1, size: 36 },
-      { kind: 'flower', x: 12, y: 1, size: 36 },
-      { kind: 'flower', x: 9, y: 3, size: 36 },
-      { kind: 'flower', x: 12, y: 3, size: 36 },
-      { kind: 'flower', x: 4, y: 2, size: 38 },
-      { kind: 'flower', x: 5, y: 3, size: 36 },
-      { kind: 'root', x: 2, y: 3, size: 40 },
-      { kind: 'flower', x: 2, y: 2, size: 30 },
-      { kind: 'small_rock', x: 2, y: 4, size: 42 },
-      { kind: 'small_rock', x: 4, y: 4, size: 42 },
-      { kind: 'small_rock', x: 11, y: 6, size: 44 },
-      { kind: 'small_rock', x: 11, y: 7, size: 42 },
-      { kind: 'small_rock', x: 14, y: 9, size: 44 },
-      { kind: 'root', x: 1, y: 6, size: 44 },
-      { kind: 'root', x: 2, y: 7, size: 44 },
-      { kind: 'root', x: 4, y: 10, size: 44 },
-      { kind: 'campfire_ash', x: 4, y: 8, size: 56 },
+      { kind: 'flower', x: 32, y: 4, size: 36 },
+      { kind: 'flower', x: 48, y: 4, size: 36 },
+      { kind: 'flower', x: 36, y: 12, size: 36 },
+      { kind: 'flower', x: 48, y: 12, size: 36 },
+      // { kind: 'tree', x: 18, y: 8, scale: 1.0,
+      //   options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},
+      // },
+      { kind: 'tree', x: 21, y: 20, scale: 0.9, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      { kind: 'tree', x: 21, y: 24, scale: 0.9, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},
+      },
+      {kind: 'tree', x: 22, y: 5, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 5, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 5, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 5, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 21, y: 5, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 6, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 6, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 6, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 6, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 6, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 7, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 7, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 9, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 7, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 7, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 8, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 9, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 8, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 8, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 10, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 11, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 12, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 13, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 14, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 15, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 16, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 20, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 20, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 21, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 21, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 21, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 16, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 20, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 29, y: 20, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 21, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 29, y: 21, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 19, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 17, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 20, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 20, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 21, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 22, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 23, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 22, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 23, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 22, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 23, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 18, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 23, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 30, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 29, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 28, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 27, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 26, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 26, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+
+      {kind: 'tree', x: 25, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 27, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 25, y: 28, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 27, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 26, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 26, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+
+      {kind: 'tree', x: 27, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 26, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 27, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 23, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 22, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 28, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+
+      {kind: 'tree', x: 25, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 24, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 24, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 22, y: 26, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 26, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 21, y: 25, scale: 0.9,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 21, y: 27, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 21, y: 28, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 21, y: 29, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 19, y: 30, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 21, y: 30, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 20, y: 29, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 20, y: 30, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 18, y: 28, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 17, y: 29, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 16, y: 29, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 18, y: 29, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 19, y: 29, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 18, y: 31, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 18, y: 30, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 17, y: 30, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 16, y: 30, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 19, y: 31, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 17, y: 31, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+
+      {kind: 'tree_dark', x: 22, y: 28, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 22, y: 29, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 22, y: 30, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 22, y: 27, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 21, y: 26, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 20, y: 31, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 23, y: 31, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 20, y: 29, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 23, y: 29, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 23, y: 30, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 23, y: 28, scale: 1.0, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree', x: 23, y: 27, scale: 0.95,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+      {kind: 'tree_dark', x: 17, y: 28, scale: 1.05, flipX: true,
+        options: {blocking: true, hitbox: { x: 18, y: 64, w: 28, h: 28 },},},
+
+      { kind: 'flower', x: 17, y: 8, size: 38 },
+      { kind: 'flower', x: 20, y: 12, size: 36 },
+      { kind: 'flower', x: 11, y: 26, size: 30 },
+      { kind: 'small_rock', x: 20, y: 16, size: 42 },
+      { kind: 'small_rock', x: 16, y: 16, size: 42 },
+      {
+        kind: 'west_village',
+        x: 5,
+        y: 27,
+        options: {
+          drawW: TILE_RENDER * 11,
+          drawH: TILE_RENDER * 9,
+          blocking: false,
+          entrance: {
+            x: TILE_RENDER * 4.5,
+            y: TILE_RENDER * 4,
+            w: TILE_RENDER * 3,
+            h: TILE_RENDER * 2,
+            exitDir: 'down',
+            transitionId: 'enterWestTown',
+            allowedEntrySides: ['up', 'down', 'right'],
+          },
+        },
+      },
+      {
+        kind: 'mountain',
+        x: 30,
+        y: 25,
+        options: {
+          drawW: TILE_RENDER * 27,
+          drawH: TILE_RENDER * 24,
+          blocking: true,
+          hitbox: {
+            x: TILE_RENDER * 11,
+            y: TILE_RENDER * 4,
+            w: TILE_RENDER * 6,
+            h: TILE_RENDER * 11,
+          },
+        },
+      },
+      {
+        kind: 'ruined_city',
+        x: 23,
+        y: 25,
+        options: {
+          drawW: TILE_RENDER * 8,
+          drawH: TILE_RENDER * 9,
+          blocking: false,
+          entrance: {
+            x: TILE_RENDER * 2,
+            y: TILE_RENDER * 4,
+            w: TILE_RENDER,
+            h: TILE_RENDER * 3.5,
+            exitDir: 'right',
+            transitionId: 'enterRuins',
+            allowedEntrySides: ['left'],
+          },
+        },
+      },
+      {
+        kind: 'rocky_hill',
+        x: 40,
+        y: 39,
+        options: {
+          drawW: TILE_RENDER * 8,
+          drawH: TILE_RENDER * 6,
+          blocking: true,
+          hitbox: {
+            x: TILE_RENDER * 2.0,
+            y: TILE_RENDER * 2.0,
+            w: TILE_RENDER * 4.0,
+            h: TILE_RENDER * 3.0,
+          },
+        },
+      },
+      { kind: 'small_rock', x: 44, y: 24, size: 44 },
+      { kind: 'small_rock', x: 44, y: 28, size: 42 },
+      { kind: 'small_rock', x: 56, y: 36, size: 44 },
+      // { kind: 'root', x: 4, y: 24, size: 44 },
+      // { kind: 'root', x: 8, y: 28, size: 44 },
+      // { kind: 'root', x: 16, y: 40, size: 44 },
+      { kind: 'campfire_ash', x: 16, y: 32, size: 56 },
+      {
+        kind: 'town_gate',
+        x: 17,
+        y: 10,
+        options: {
+          drawW: TILE_RENDER * 8,
+          drawH: TILE_RENDER * 6,
+          blocking: false,
+          entrance: {
+            x: 96,
+            y: 100,
+            w: 64,
+            h: 44,
+            exitDir: 'down',
+            transitionId: 'enterTown',
+          },
+        },
+      },
+      {
+        kind: 'cave_entrance',
+        x: 54,
+        y: 32,
+        options: {
+          drawW: 192,
+          drawH: 160,
+          blocking: true,
+          hitboxes: [
+            { x: 16, y: 88, w: 56, h: 64 },
+            { x: 120, y: 88, w: 56, h: 64 },
+            { x: 20, y: 56, w: 152, h: 48 },
+          ],
+          entrance: {
+            x: 64,
+            y: 124,
+            w: 64,
+            h: 36,
+            exitDir: 'up',
+            transitionId: 'enterDungeon',
+          },
+        },
+      },
     ],
 
     houses: [],
 
     chests: [
-      { x: 5, y: 2, options: { id: 'fieldPondChest', item: 'potion', amount: 1, spriteKey: 'chest' } },
-      { x: 11, y: 8, options: { id: 'fieldRockChest', item: 'gold', amount: 20, spriteKey: 'chest' } },
+      { x: 40, y: 8, options: { id: 'fieldPondChest', item: 'potion', amount: 1, spriteKey: 'chest' } },
+      { x: 44, y: 32, options: { id: 'fieldRockChest', item: 'gold', amount: 20, spriteKey: 'chest' } },
     ],
 
     signs: [
-      { x: 9, y: 2, lines: ['南東の道は　くらやみの洞窟へ続く。', '草むらを外れて　道を歩けば　敵に会いにくい。'] },
-      { x: 3, y: 10, lines: ['西の荒野へ。', '強敵を倒した者だけが　進める。'] },
-      { x: 3, y: 1, lines: ['← 北西の森の入口', '何かが息づいているようだ…'] },
+      { x: 36, y: 8, lines: ['南東の道は　くらやみの洞窟へ続く。', '草むらを外れて　道を歩けば　敵に会いにくい。'] },
+      { x: 12, y: 40, lines: ['西の荒野へ。', '強敵を倒した者だけが　進める。'] },
+      { x: 23, y: 8, lines: ['→ 北西の森の入口', '何かが息づいているようだ…'] },
     ],
 
     entrances: [
-      { type: 'townEntrance', x: 10, y: 2, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'down', transitionId: 'enterTown' },
-      { type: 'dungeonEntrance', x: 13, y: 8, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'up', transitionId: 'enterDungeon' },
-      { type: 'field2Entrance', x: 2, y: 10, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'up', transitionId: 'enterField2' },
+      { type: 'field2Entrance', x: 8, y: 40, w: TILE_RENDER * 2, h: TILE_RENDER * 2, exitDir: 'up', transitionId: 'enterField2' },
     ],
     },
   town: {
     decorations: [
-        { kind: 'flower', x:  1, y: 1, size: 34 },
-        { kind: 'flower', x:  4, y: 1, size: 34 },
-        { kind: 'flower', x: 10, y: 1, size: 34 },
-        { kind: 'flower', x: 12, y: 2, size: 34 },
-        { kind: 'barrel', x:  1, y: 3, size: 42 },
-        { kind: 'crate',  x:  4, y: 3, size: 42 },
-        { kind: 'barrel', x: 10, y: 3, size: 42 },
-        { kind: 'crate',  x: 12, y: 4, size: 42 },
-        { kind: 'flower', x:  1, y: 6, size: 34 },
-        { kind: 'small_rock', x: 1, y: 5, size: 34 },
-        { kind: 'small_rock', x: 12, y: 6, size: 34 },
+        { kind: 'flower', x:  4, y: 15, size: 34 },
+        { kind: 'flower', x: 16, y: 15, size: 34 },
+        { kind: 'flower', x: 40, y: 15, size: 34 },
+        { kind: 'flower', x: 48, y: 15, size: 34 },
+        { kind: 'flower', x: 10, y: 30, size: 34 },
+        { kind: 'flower', x: 26, y: 15, size: 34 },
+        { kind: 'flower', x: 38, y: 29, size: 34 },
+        { kind: 'barrel', x:  4, y: 12, size: 42 },
+        { kind: 'barrel', x: 50, y: 30, size: 42 },
+        { kind: 'barrel', x: 26, y: 24, size: 42 },
+        { kind: 'barrel', x: 26, y: 21, size: 42 },
+        { kind: 'crate',  x: 16, y: 12, size: 42 },
+        { kind: 'crate',  x: 48, y: 16, size: 42 },
+        { kind: 'small_rock', x: 4, y: 20, size: 34 },
+        { kind: 'small_rock', x: 19, y: 26, size: 34 },
+        { kind: 'small_rock', x: 4, y: 28, size: 34 },
+        { kind: 'small_rock', x: 4, y: 30, size: 34 },
+        {
+          kind: 'fountain',
+          x: 22,
+          y: 11,
+          options: {
+            drawW: 200,
+            drawH: 200,
+            blocking: true,
+            hitbox: { x: 24, y: 64, w: 150, h: 100 },
+          },
+        },
     ],
 
     houses: TOWN_HOUSES,
@@ -92,11 +703,11 @@ export const MAP_OBJECTS = {
     chests: [],
 
     signs: [
-        { x: 7, y: 3, lines: ['道具屋はこちら', 'ポーションと防具を扱っています'] },
+        { x: 20, y: 35, lines: ['ヒカリのまち'] },
     ],
 
     entrances: [
-        { type: 'townExit', x: 6, y: 9, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'down', transitionId: 'exitTown' },
+        ...createTownOuterExitEntrances(),
         ...TOWN_HOUSES
         .filter(house => house.houseId)
         .map(house => ({
@@ -162,7 +773,7 @@ field2: {
   entrances: [
     { type: 'field1Return', x: 13, y: 10, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'up', transitionId: 'returnField1' },
     { type: 'shadowTownEntrance', x: 3, y: 1, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'down', transitionId: 'enterShadowTown' },
-    { type: 'forestEntrance', x: 3, y: 10, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'up', transitionId: 'enterCursedForest' },
+    { type: 'forestEntrance', x: 24, y: 10, w: TILE_RENDER * 2, h: TILE_RENDER, exitDir: 'up', transitionId: 'enterCursedForest' },
     { type: 'outpostEntrance', x: 12, y: 5, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'right', transitionId: 'enterOutpost' },
     { type: 'castleEntrance', x: 12, y: 1, w: TILE_RENDER, h: TILE_RENDER, exitDir: 'up', transitionId: 'enterCastle' },
   ],
@@ -379,16 +990,14 @@ outpost: {
 
 leafaForest: {
   decorations: [
-    { kind: 'flower', x: 2, y: 1, size: 32 },
-    { kind: 'flower', x: 7, y: 1, size: 32 },
-    { kind: 'flower', x: 3, y: 3, size: 30 },
-    { kind: 'flower', x: 6, y: 3, size: 30 },
-    { kind: 'root', x: 2, y: 4, size: 40 },
-    { kind: 'root', x: 7, y: 4, size: 40 },
-    { kind: 'root', x: 3, y: 5, size: 38 },
-    { kind: 'root', x: 6, y: 5, size: 38 },
-    { kind: 'small_rock', x: 3, y: 7, size: 36 },
-    { kind: 'small_rock', x: 6, y: 7, size: 36 },
+    ...createLeafaForestBorderTrees(),
+    ...createLeafaForestMazeTrees(),
+    { kind: 'flower', x: 13, y: 8, size: 32 },
+    { kind: 'flower', x: 26, y: 8, size: 32 },
+    { kind: 'flower', x: 11, y: 31, size: 30 },
+    { kind: 'flower', x: 31, y: 35, size: 30 },
+    { kind: 'small_rock', x: 12, y: 36, size: 36 },
+    { kind: 'small_rock', x: 29, y: 30, size: 36 },
   ],
 
   houses: [],
@@ -398,20 +1007,181 @@ leafaForest: {
   chests: [],
 
   signs: [
-    { x: 3, y: 8, lines: ['魔物の気配がする。'] },
+    { x: 18, y: 39, lines: ['魔物の気配がする。'] },
   ],
 
   entrances: [
     {
       type: 'leafaForestExit',
-      x: 4,
-      y: 9,
-      w: TILE_RENDER * 2,
+      x: 18,
+      y: 41,
+      w: TILE_RENDER * 4,
       h: TILE_RENDER,
       exitDir: 'down',
       transitionId: 'exitLeafaForest',
     },
   ],
+},
+
+ruinedCity: {
+  decorations: [],
+  houses: [],
+  npcs: [],
+  chests: [],
+  signs: [],
+  entrances: [
+    {
+      type: 'ruinsExit',
+      x: 0,
+      y: 0,
+      w: TILE_RENDER,
+      h: ruinedCityMap.length * TILE_RENDER,
+      exitDir: 'left',
+      transitionId: 'exitRuins',
+    },
+  ],
+},
+
+westTown: {
+  decorations: [
+    {
+      kind: 'seaside_house',
+      x: 10,
+      y: 8,
+      options: {
+        drawW: TILE_RENDER * 10,
+        drawH: TILE_RENDER * 8,
+        blocking: true,
+        hitbox: {
+          x: TILE_RENDER * 1.5,
+          y: TILE_RENDER * 1.8,
+          w: TILE_RENDER * 7,
+          h: TILE_RENDER * 5,
+        },
+      },
+    },
+    {
+      kind: 'seaside_house',
+      x: 23,
+      y: 23,
+      options: {
+        drawW: TILE_RENDER * 10,
+        drawH: TILE_RENDER * 8,
+        blocking: true,
+        hitbox: {
+          x: TILE_RENDER * 1.5,
+          y: TILE_RENDER * 1.8,
+          w: TILE_RENDER * 7,
+          h: TILE_RENDER * 5,
+        },
+      },
+    },
+    {
+      kind: 'wooden_pier',
+      x: 4,
+      y: 17.5,
+      options: {
+        drawW: TILE_RENDER * 8,
+        drawH: TILE_RENDER * 8,
+        blocking: false,
+        walkable: true,
+        walkbox: {
+          x: TILE_RENDER * 0.75,
+          y: TILE_RENDER * 4 ,
+          w: TILE_RENDER * 5.25,
+          h: TILE_RENDER * 0.8,
+        },
+      },
+    },
+    {
+      kind: 'lighthouse',
+      x: 16,
+      y: 15,
+      options: {
+        drawW: TILE_RENDER * 8,
+        drawH: TILE_RENDER * 10,
+        blocking: true,
+        ySortWithActors: true,
+        hitbox: {
+          x: TILE_RENDER * 3,
+          y: TILE_RENDER * 8,
+          w: TILE_RENDER * 2,
+          h: TILE_RENDER,
+        },
+      },
+    },
+    {
+      kind: 'ship_right',
+      x: 2,
+      y: 8,
+      options: {
+        drawW: TILE_RENDER * 6,
+        drawH: TILE_RENDER * 5,
+        blocking: true,
+        hitbox: {
+          x: TILE_RENDER * 0.5,
+          y: TILE_RENDER * 1.5,
+          w: TILE_RENDER * 4,
+          h: TILE_RENDER,
+        },
+      },
+    },
+    {
+      kind: 'ship_right',
+      x: 2,
+      y: 22,
+      options: {
+        drawW: TILE_RENDER * 6,
+        drawH: TILE_RENDER * 5,
+        blocking: true,
+        hitbox: {
+          x: TILE_RENDER * 0.5,
+          y: TILE_RENDER * 1.5,
+          w: TILE_RENDER * 4,
+          h: TILE_RENDER,
+        },
+      },
+    },
+        {
+      kind: 'ship_right',
+      x: 2,
+      y: 25,
+      options: {
+        drawW: TILE_RENDER * 6,
+        drawH: TILE_RENDER * 5,
+        blocking: true,
+        hitbox: {
+          x: TILE_RENDER * 0.5,
+          y: TILE_RENDER * 1.5,
+          w: TILE_RENDER * 4,
+          h: TILE_RENDER,
+        },
+      },
+    },
+    { kind: 'crate', x: 29, y: 22, size: 42, options: { blocking: true } },
+    { kind: 'crate', x: 27.3, y: 22, size: 42, options: { blocking: true } },
+    { kind: 'crate', x: 29, y: 23.6, size: 42, options: { blocking: true } },
+    { kind: 'crate', x: 27.3, y: 23.6, size: 42, options: { blocking: true } },
+    { kind: 'barrel', x: 8.0, y: 25, size: 42, options: { blocking: true } },
+    { kind: 'barrel', x: 10, y: 25, size: 42, options: { blocking: true } },
+    { kind: 'crate', x: 8.6, y: 17.1, size: 42, options: { blocking: true } },
+    { kind: 'crate', x: 5, y: 5, size: 42, options: { blocking: true } },
+  ],
+  
+  houses: [
+    {
+      x: 25,
+      y: 14,
+      spriteKey: 'house_inn',
+      width: 1024 * 1.85,
+      height: 960 * 1.85,
+      variant: 'inn',
+    },
+  ],
+  npcs: WEST_TOWN_NPCS,
+  chests: [],
+  signs: [],
+  entrances: createWestTownOuterExitEntrances(),
 },
 
 house: {

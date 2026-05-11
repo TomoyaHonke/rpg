@@ -57,6 +57,8 @@ export function drawHeroAtFoot(ctx, footX, footY, dir, deps) {
   const {
     HERO_WALK_DRAW_W,
     HERO_WALK_DRAW_H,
+    PLAYER_DRAW_OFFSET_X,
+    PLAYER_DRAW_OFFSET_Y,
     HERO_SC,
     getHeroSpriteInfo,
     drawHero,
@@ -64,8 +66,8 @@ export function drawHeroAtFoot(ctx, footX, footY, dir, deps) {
 
   const drawW = HERO_WALK_DRAW_W;
   const drawH = HERO_WALK_DRAW_H;
-  const dx = Math.round(footX - drawW / 2);
-  const dy = Math.round(footY - drawH);
+  const dx = Math.round(footX - drawW / 2 + PLAYER_DRAW_OFFSET_X);
+  const dy = Math.round(footY - drawH + PLAYER_DRAW_OFFSET_Y);
 
   const si = getHeroSpriteInfo(dir);
 

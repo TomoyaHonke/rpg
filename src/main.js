@@ -11,6 +11,38 @@
   ENC_RATE,
   SAVE_KEY,
   DEBUG_HITBOX,
+  DEBUG_DISABLE_ENCOUNTERS,
+  BASE_SPRITE_SIZE,
+  PLAYER_DRAW_OFFSET_X,
+  PLAYER_DRAW_OFFSET_Y,
+  PLAYER_HITBOX_WIDTH,
+  PLAYER_HITBOX_HEIGHT,
+  PLAYER_HITBOX_OFFSET_X,
+  PLAYER_HITBOX_OFFSET_Y,
+  NPC_HITBOX_WIDTH,
+  NPC_HITBOX_HEIGHT,
+  NPC_HITBOX_OFFSET_X,
+  NPC_HITBOX_OFFSET_Y,
+  OBJECT_SCALE,
+  CHEST_HITBOX_WIDTH,
+  CHEST_HITBOX_HEIGHT,
+  CHEST_HITBOX_OFFSET_X,
+  CHEST_HITBOX_OFFSET_Y,
+  SIGN_HITBOX_WIDTH,
+  SIGN_HITBOX_HEIGHT,
+  SIGN_HITBOX_OFFSET_X,
+  SIGN_HITBOX_OFFSET_Y,
+  BOSS_HITBOX_WIDTH_RATIO,
+  BOSS_HITBOX_HEIGHT_RATIO,
+  HOUSE_HITBOX_WIDTH_RATIO,
+  HOUSE_HITBOX_HEIGHT_RATIO,
+  HOUSE_HITBOX_EXTRA_HEIGHT,
+  HOUSE_HITBOX_BOTTOM_INSET,
+  HOUSE_DOOR_CLEARANCE,
+  HOUSE_DOOR_HITBOX_WIDTH,
+  HOUSE_DOOR_HITBOX_HEIGHT,
+  FOREST_ENTRANCE_RENDER_WIDTH,
+  FOREST_ENTRANCE_RENDER_HEIGHT,
   HERO_SC,
   NPC_SC,
   BOSS_SC,
@@ -84,6 +116,8 @@ import {
   LEAFA_RESCUE_ENEMY_NPCS,
   fieldMap,
   leafaForestMap,
+  ruinedCityMap,
+  westTownMap,
   townMap,
   dungeonMap,
   field2Map,
@@ -834,13 +868,23 @@ const ENCOUNTER_ENEMIES = {
         npcs: OUTPOST_NPCS,
         encounterTable: [],
         },
-    leafaForest: {
-        tiles: leafaForestMap,
-        battleBg: 'forest_event',
-        ...MAP_OBJECTS.leafaForest,
-        encounterTable: () => getLeafaForestEncounterTable(ENCOUNTER_ENEMIES),
+	    leafaForest: {
+	        tiles: leafaForestMap,
+	        battleBg: 'forest_event',
+	        ...MAP_OBJECTS.leafaForest,
+	        encounterTable: () => getLeafaForestEncounterTable(ENCOUNTER_ENEMIES),
+	        },
+      ruinedCity: {
+        tiles: ruinedCityMap,
+        ...MAP_OBJECTS.ruinedCity,
+        encounterTable: [],
         },
-  };
+	    westTown: {
+	        tiles: westTownMap,
+	        ...MAP_OBJECTS.westTown,
+	        encounterTable: [],
+	        },
+	  };
 
   // ============================================================
   // ゲーム変数
@@ -879,6 +923,7 @@ let prologueState = createInitialPrologueState();
   let shopMsg = '';      // 道具屋メッセージ
  
   let currentBattleBgKey = 'field'; // 戦闘に入った場所の背景種別
+  let battleCanEscape = true;       // 現在の戦闘で逃走できるか
   let leafaRescueBattle = false;    // リーファ救出イベント戦闘中フラグ
   let equipCursor = 0;    // メインメニューの選択位置
   let equipMenuMode = 'main';
@@ -1012,6 +1057,8 @@ function getMapSystemDeps() {
     outpostMap,
     castleMap,
     leafaForestMap,
+    ruinedCityMap,
+    westTownMap,
     isHouseMap,
   };
 }
@@ -1718,6 +1765,8 @@ function useElixir(target) {
     HERO_WALK_FRAMES,
     HERO_WALK_DRAW_W,
     HERO_WALK_DRAW_H,
+    PLAYER_DRAW_OFFSET_X,
+    PLAYER_DRAW_OFFSET_Y,
     HERO_SC,
     getHeroSpriteInfo,
     drawHero,
@@ -2017,6 +2066,7 @@ function getCollisionBox(entity, x = entity.x, y = entity.y) {
       iron_door:    'iron_door',
       demon_altar:  'demon_altar',
       forest_entrance: 'forest_entrance',
+      tree: 'tree',
     };
     return keyMap[kind] || kind;
   }
@@ -2039,6 +2089,19 @@ function getCollisionBox(entity, x = entity.x, y = entity.y) {
     iron_door:    { w: 96,  h: 128 },
     demon_altar:  { w: 112, h: 96 },
     forest_entrance: { w: 256, h: 320 },
+    town_gate:    { w: 256, h: 192 },
+    cave_entrance:{ w: 192, h: 160 },
+    fountain:     { w: 112, h: 112 },
+    tree:         { w: 64,  h: 96 },
+    tree_dark:    { w: 64,  h: 96 },
+    mountain:     { w: TILE_RENDER * 9, h: TILE_RENDER * 8 },
+    west_village: { w: TILE_RENDER * 5, h: TILE_RENDER * 4 },
+    seaside_house:{ w: TILE_RENDER * 4, h: TILE_RENDER * 3 },
+    wooden_pier:  { w: TILE_RENDER * 6, h: TILE_RENDER * 2 },
+    lighthouse:   { w: TILE_RENDER * 4, h: TILE_RENDER * 8 },
+    ship_right:   { w: TILE_RENDER * 5, h: TILE_RENDER * 3 },
+    ruined_city:  { w: TILE_RENDER * 7, h: TILE_RENDER * 6 },
+    rocky_hill:   { w: TILE_RENDER * 4, h: TILE_RENDER * 3 },
   };
 
 
@@ -2074,13 +2137,13 @@ function drawObject(kind, px, py, drawW, drawH, object = {}) {
     };
   }
 
-  function makeHouseHitbox(drawW, drawH) {
-    const hitW = Math.round(drawW * 0.60);
-    const hitH = Math.round(drawH * 0.35) + 100;
-    const doorClearance = Math.round(TILE_RENDER * 0.16);
+  function makeHouseHitbox(drawW, drawH, offsetY = 0) {
+    const hitW = Math.round(drawW * HOUSE_HITBOX_WIDTH_RATIO);
+    const hitH = Math.round(drawH * HOUSE_HITBOX_HEIGHT_RATIO) + HOUSE_HITBOX_EXTRA_HEIGHT;
+    const hitBottomY = offsetY - HOUSE_HITBOX_BOTTOM_INSET - 50;
     return {
       x: Math.round((TILE_RENDER - hitW) / 2),
-      y: -hitH - doorClearance,
+      y: hitBottomY - hitH,
       w: hitW,
       h: hitH,
     };
@@ -2228,10 +2291,28 @@ function getEntitySystemDeps() {
   return {
     tileToPx,
     TILE_RENDER,
+    BASE_SPRITE_SIZE,
     DEFAULT_CHEST_DRAW_SIZE,
     DEFAULT_SIGN_DRAW_SIZE,
     DEFAULT_NPC_DRAW_W,
     DEFAULT_NPC_DRAW_H,
+    NPC_HITBOX_WIDTH,
+    NPC_HITBOX_HEIGHT,
+    NPC_HITBOX_OFFSET_X,
+    NPC_HITBOX_OFFSET_Y,
+    OBJECT_SCALE,
+    CHEST_HITBOX_WIDTH,
+    CHEST_HITBOX_HEIGHT,
+    CHEST_HITBOX_OFFSET_X,
+    CHEST_HITBOX_OFFSET_Y,
+    SIGN_HITBOX_WIDTH,
+    SIGN_HITBOX_HEIGHT,
+    SIGN_HITBOX_OFFSET_X,
+    SIGN_HITBOX_OFFSET_Y,
+    BOSS_HITBOX_WIDTH_RATIO,
+    BOSS_HITBOX_HEIGHT_RATIO,
+    FOREST_ENTRANCE_RENDER_WIDTH,
+    FOREST_ENTRANCE_RENDER_HEIGHT,
     NPC_SC,
     VIEW_W,
     VIEW_H,
@@ -2273,6 +2354,7 @@ function getEntitySystemDeps() {
     CASTLE_BOSS_POS,
     LEAFA_RESCUE_POS,
     BOSS_OFF,
+    BOSS_SC,
     NPC_OFF,
 
     startBossBattle,
@@ -2286,6 +2368,8 @@ function getEntitySystemDeps() {
     TOWN_HOUSES,
     SHADOW_TOWN_HOUSES,
     HOUSE_TRANSITION_IDS,
+    HOUSE_DOOR_HITBOX_WIDTH,
+    HOUSE_DOOR_HITBOX_HEIGHT,
     makeHouseDoorRectFn: makeHouseDoorRect,
     makeEntranceEntityFn: makeEntranceEntity,
     makeNpcEntityFn: makeNpcEntity,
@@ -2423,6 +2507,9 @@ function placeHeroForTransition(transition, entranceEntity, spawnX, spawnY, exit
     };
 
     placeHeroOutsideDoor(doorEntity, exitDir);
+    if (transition.faceExitDirAfterPlacement) {
+      setHeroDirection(exitDir);
+    }
     return;
   }
 
@@ -2545,6 +2632,10 @@ function makeEntranceFromDef(def) {
 
   function getHeroEntityDeps() {
   return {
+    PLAYER_HITBOX_WIDTH,
+    PLAYER_HITBOX_HEIGHT,
+    PLAYER_HITBOX_OFFSET_X,
+    PLAYER_HITBOX_OFFSET_Y,
     centeredBottomHitbox,
     updateMove,
     drawHeroEntity,
@@ -2652,11 +2743,14 @@ function getBlockingEntityForBox(box) {
   function getMovementSystemDeps() {
   return {
     currentMap: runtimeState.currentMap,
-    mapCols,
-    mapRows,
-    TILE_META,
+	    mapCols,
+	    mapRows,
+	    TILE_META,
+	    TILE_RENDER,
+	    syncEntities,
+	    entities,
 
-    hero,
+	    hero,
     getCollisionBox,
     pxToTile,
     isBlockedTile,
@@ -3048,6 +3142,8 @@ function refreshStatusBar() {
     if (runtimeState.currentMap === cursedForestMap) return '★ 呪われた森';
     if (runtimeState.currentMap === castleMap) return '★ 魔王の城';
     if (runtimeState.currentMap === leafaForestMap) return '◆ 北西の森';
+    if (runtimeState.currentMap === ruinedCityMap) return '◆ 廃墟';
+    if (runtimeState.currentMap === westTownMap) return '★ 西の街';
     if (isHouseMap(runtimeState.currentMap)) {
       return runtimeState.currentHouseId && runtimeState.currentHouseId.startsWith('shadow') ? '★ カゲのまち' : '★ ヒカリのまち';
     }
@@ -3071,6 +3167,7 @@ function refreshStatusBar() {
   function getMapBGMKey() {
     if (runtimeState.currentMap === townMap) return 'town_theme';
     if (runtimeState.currentMap === shadowTownMap) return 'shadow_town_theme';
+    if (runtimeState.currentMap === westTownMap) return 'town_theme';
     if (runtimeState.currentMap === outpostMap) return 'town_theme';
     if (isHouseMap(runtimeState.currentMap)) return 'town_theme';
     if (runtimeState.currentMap === dungeonMap) return 'dungeon_theme';
@@ -3571,6 +3668,7 @@ function openSignRead(sign) {
     battleTargetMode    = null;
     selectedTargetIndex = 0;
     battleCommandIndex  = 0;
+    battleCanEscape     = options.canEscape !== false && options.allowEscape !== false;
     clearBattleIntro();
     currentBattleBgKey = resolveBattleBgKey(resolveBattleStartBgKey({ ...options, enemy: getMainBattleEnemy() }));
     setGameState(GameState.BATTLE);
@@ -3716,7 +3814,7 @@ function openSignRead(sign) {
       makeBattleEnemy(ENEMY_DEFS.tree_minion),
       makeBattleEnemy(ENEMY_DEFS.goblin),
       makeBattleEnemy(ENEMY_DEFS.tree_minion),
-    ], '魔物たちが　現れた！', { bg: 'forest_event' });
+    ], '魔物たちが　現れた！', { bg: 'forest_event', canEscape: false });
   }
 
   function isLeafaRescueAmbushActive() {
@@ -3989,6 +4087,10 @@ function openSignRead(sign) {
   // ============================================================
   function doRun() {
     if (battleVictory.active || battleVictory.pending || !heroTurn || currentState !== GameState.BATTLE) return;
+    if (!battleCanEscape) {
+      msg = '逃げられない！';
+      return;
+    }
     if (hasBossEnemy()) {
       const boss = getMainBattleEnemy();
       msg = boss.defId === 'demon_lord'
@@ -4832,6 +4934,8 @@ function handleEventEntityInteraction(heroBox) {
 }
 
 function checkRandomEncounterAtHeroTile() {
+  if (DEBUG_DISABLE_ENCOUNTERS) return;
+
   const tx = heroTileX();
   const ty = heroTileY();
   const tile = tileAt(tx, ty);

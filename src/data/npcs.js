@@ -1,7 +1,7 @@
 
 export const NPCS = [
     {
-      x: 4, y: 6,
+      x: 23, y: 12,
       npcId: 'elder',
       role: 'talk',
       name: '長老',
@@ -15,7 +15,7 @@ export const NPCS = [
       ],
     },
     {
-      x: 8, y: 5,
+      x: 32, y: 32,
       npcId: 'child',
       role: 'event',
       name: 'こども',
@@ -30,7 +30,7 @@ export const NPCS = [
       ],
     },
     {
-      x: 2, y: 6,
+      x: 8, y: 35,
       npcId: 'town_gardener',
       role: 'talk',
       name: '花好きの住人',
@@ -43,7 +43,7 @@ export const NPCS = [
       ],
     },
     {
-      x: 11, y: 6,
+      x: 44, y: 33,
       npcId: 'town_traveler',
       role: 'talk',
       name: '旅の男',
@@ -56,7 +56,7 @@ export const NPCS = [
       ],
     },
     {
-      x: 11, y: 3,
+      x: 27, y: 14,
       npcId: 'town_storyteller',
       role: 'talk',
       name: '語り部',
@@ -188,7 +188,7 @@ export const NPCS = [
 
   export const FIELD_NPCS = [
     {
-      x: 4, y: 7,
+      x: 40, y: 28,
       npcId: 'field_healer',
       role: 'inn',
       name: '旅の休憩者',
@@ -236,3 +236,97 @@ export const NPCS = [
       lines: ['ここは魔王ヴァルドールの居城だ。', '命が惜しければ引き返せ！'],
     },
   ];
+
+export const WEST_TOWN_NPCS = [
+  {
+    x: 18,
+    y: 17,
+    npcId: 'west_town_elder',
+    role: 'talk',
+    name: '港町の長老',
+    spriteKey: 'old_villager',
+    drawW: 70,
+    drawH: 65,
+    bodyCol: '#778877',
+    hairCol: '#cccccc',
+    lines: [
+      'この灯台は　昔から海を照らしてきた。',
+      'だが最近、南の森の奥から　いやな気配がするのじゃ。',
+    ],
+  },
+  {
+    x: 21,
+    y: 12,
+    npcId: 'west_town_resident_1',
+    role: 'talk',
+    name: '港町の住人',
+    spriteKey: 'town_resident',
+    drawW: 130,
+    drawH: 130,
+    bodyCol: '#557799',
+    hairCol: '#332211',
+    lines: [
+      'ここは西の港町。小さいが、海の恵みで暮らしている。',
+    ],
+  },
+  {
+    x: 15,
+    y: 22,
+    npcId: 'west_town_resident_2',
+    role: 'talk',
+    name: '船乗り',
+    spriteKey: 'town_resident',
+    drawW: 130,
+    drawH: 130,
+    bodyCol: '#556677',
+    hairCol: '#553322',
+    lines: [
+      '船乗りたちは　風を読むのがうまいんだ。',
+    ],
+  },
+  {
+    x: 27,
+    y: 19,
+    npcId: 'west_town_resident_3',
+    role: 'talk',
+    name: '港の住人',
+    spriteKey: 'lore_npc',
+    drawW: 100,
+    drawH: 100,
+    bodyCol: '#665566',
+    hairCol: '#cccccc',
+    lines: [
+      '東へ行くなら、森には気をつけな。昼でも暗い場所がある。',
+    ],
+  },
+  {
+    x: 7,
+    y: 20,
+    npcId: 'west_town_child_1',
+    role: 'talk',
+    name: '港のこども',
+    spriteKey: 'town_child',
+    drawW: 100,
+    drawH: 100,
+    bodyCol: '#ddbb22',
+    hairCol: '#994400',
+    lines: [
+      'ねえねえ、あの大きな船、いつ動くの？',
+    ],
+  },
+  {
+    x: 13,
+    y: 13,
+    npcId: 'west_town_child_2',
+    role: 'talk',
+    name: '灯台に憧れるこども',
+    spriteKey: 'town_child',
+    drawW: 100,
+    drawH: 100,
+    bodyCol: '#dd8844',
+    hairCol: '#553322',
+    lines: [
+      'ぼく、灯台の上から海を見てみたいな！',
+    ],
+  },
+];

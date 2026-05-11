@@ -3,7 +3,11 @@ export function makeChestEntity(x, y, options = {}, deps) {
     tileToPx,
     TILE_RENDER,
     DEFAULT_CHEST_DRAW_SIZE,
-    centeredBottomHitbox,
+    OBJECT_SCALE,
+    CHEST_HITBOX_WIDTH,
+    CHEST_HITBOX_HEIGHT,
+    CHEST_HITBOX_OFFSET_X,
+    CHEST_HITBOX_OFFSET_Y,
     chestFlagKey,
     flags,
     grantChestRewards,
@@ -22,13 +26,18 @@ export function makeChestEntity(x, y, options = {}, deps) {
     amount: options.amount,
     rewards: options.rewards,
     spriteKey: options.spriteKey || 'chest',
-    drawW: options.drawW || Math.round(DEFAULT_CHEST_DRAW_SIZE * (options.scale || 1)),
-    drawH: options.drawH || Math.round(DEFAULT_CHEST_DRAW_SIZE * (options.scale || 1)),
+    drawW: options.drawW || Math.round(DEFAULT_CHEST_DRAW_SIZE * (options.scale || OBJECT_SCALE)),
+    drawH: options.drawH || Math.round(DEFAULT_CHEST_DRAW_SIZE * (options.scale || OBJECT_SCALE)),
     x: tileToPx(x),
     y: tileToPx(y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, 0.5, 0.35),
+    hitbox: resolveConfigurableHitbox(options, {
+      x: CHEST_HITBOX_OFFSET_X,
+      y: CHEST_HITBOX_OFFSET_Y,
+      w: CHEST_HITBOX_WIDTH,
+      h: CHEST_HITBOX_HEIGHT,
+    }),
     flagKey,
     blocking: options.blocking !== false,
     update() {},
@@ -56,7 +65,10 @@ export function makeSignEntity(x, y, lines, flagKey = null, options = {}, deps) 
     tileToPx,
     TILE_RENDER,
     DEFAULT_SIGN_DRAW_SIZE,
-    centeredBottomHitbox,
+    SIGN_HITBOX_WIDTH,
+    SIGN_HITBOX_HEIGHT,
+    SIGN_HITBOX_OFFSET_X,
+    SIGN_HITBOX_OFFSET_Y,
     resolveEntityDrawSize,
     openSignRead,
   } = deps;
@@ -73,7 +85,12 @@ export function makeSignEntity(x, y, lines, flagKey = null, options = {}, deps) 
     drawH: drawSize.h,
     lines,
     flagKey,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, 0.5, 0.35),
+    hitbox: resolveConfigurableHitbox(options, {
+      x: SIGN_HITBOX_OFFSET_X,
+      y: SIGN_HITBOX_OFFSET_Y,
+      w: SIGN_HITBOX_WIDTH,
+      h: SIGN_HITBOX_HEIGHT,
+    }),
     blocking: false,
     update() {},
     interact() {
@@ -89,6 +106,10 @@ export function makeHouseEntity(x, y, spriteKey = 'house', width = 256, height =
     makeHouseHitbox,
     drawHouseEntity,
   } = deps;
+  const drawW = toTileRenderSize(width, TILE_RENDER);
+  const drawH = toTileRenderSize(height, TILE_RENDER);
+  const offsetX = scaleLegacyPixel(options.offsetX || 0, TILE_RENDER);
+  const offsetY = scaleLegacyPixel(options.offsetY || 0, TILE_RENDER);
 
   return {
     type: 'house',
@@ -98,11 +119,11 @@ export function makeHouseEntity(x, y, spriteKey = 'house', width = 256, height =
     y: tileToPx(y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    drawW: width,
-    drawH: height,
-    offsetX: options.offsetX || 0,
-    offsetY: options.offsetY || 0,
-    hitbox: options.hitbox || makeHouseHitbox(width, height),
+    drawW,
+    drawH,
+    offsetX,
+    offsetY,
+    hitbox: options.hitbox || makeHouseHitbox(drawW, drawH, offsetY),
     blocking: true,
     update() {},
     draw() {
@@ -117,19 +138,22 @@ export function makeNpcEntity(npc, deps) {
     TILE_RENDER,
     DEFAULT_NPC_DRAW_W,
     DEFAULT_NPC_DRAW_H,
+    NPC_HITBOX_WIDTH,
+    NPC_HITBOX_HEIGHT,
+    NPC_HITBOX_OFFSET_X,
+    NPC_HITBOX_OFFSET_Y,
     NPC_SC,
     VIEW_W,
     VIEW_H,
     renderCamera,
     resolveEntityDrawSize,
-    centeredBottomHitbox,
     drawNPC,
     getNpcRole,
     openShop,
     openDialogue,
   } = deps;
 
-  const npcDrawSize = resolveEntityDrawSize(npc, DEFAULT_NPC_DRAW_W, DEFAULT_NPC_DRAW_H);
+  const npcDrawSize = resolveEntityDrawSize(npc, DEFAULT_NPC_DRAW_W, DEFAULT_NPC_DRAW_H, TILE_RENDER);
 
   return {
     type: 'npc',
@@ -138,7 +162,12 @@ export function makeNpcEntity(npc, deps) {
     y: tileToPx(npc.y) + (npc.offsetY || 0),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER),
+    hitbox: resolveConfigurableHitbox(npc, {
+      x: NPC_HITBOX_OFFSET_X,
+      y: NPC_HITBOX_OFFSET_Y,
+      w: NPC_HITBOX_WIDTH,
+      h: NPC_HITBOX_HEIGHT,
+    }),
     blocking: true,
     drawW: npcDrawSize.w,
     drawH: npcDrawSize.h,
@@ -172,24 +201,33 @@ export function makeEnemyNpcEntity(enemyNpc, deps) {
   const {
     tileToPx,
     TILE_RENDER,
+    BASE_SPRITE_SIZE,
+    NPC_HITBOX_WIDTH,
+    NPC_HITBOX_HEIGHT,
+    NPC_HITBOX_OFFSET_X,
+    NPC_HITBOX_OFFSET_Y,
     VIEW_W,
     VIEW_H,
     renderCamera,
     resolveEntityDrawSize,
-    centeredBottomHitbox,
     drawEnemy,
   } = deps;
 
-  const enemyDrawSize = resolveEntityDrawSize(enemyNpc, 130, 130);
+  const enemyDrawSize = resolveEntityDrawSize(enemyNpc, TILE_RENDER, TILE_RENDER, TILE_RENDER);
 
   return {
     type: 'enemy_npc',
     source: enemyNpc,
-    x: tileToPx(enemyNpc.x) + (enemyNpc.offsetX || 0),
-    y: tileToPx(enemyNpc.y) + (enemyNpc.offsetY || 0),
+    x: tileToPx(enemyNpc.x) + scaleLegacyPixel(enemyNpc.offsetX || 0, TILE_RENDER),
+    y: tileToPx(enemyNpc.y) + scaleLegacyPixel(enemyNpc.offsetY || 0, TILE_RENDER),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER),
+    hitbox: resolveConfigurableHitbox(enemyNpc, {
+      x: NPC_HITBOX_OFFSET_X,
+      y: NPC_HITBOX_OFFSET_Y,
+      w: NPC_HITBOX_WIDTH,
+      h: NPC_HITBOX_HEIGHT,
+    }),
     blocking: true,
     drawW: enemyDrawSize.w,
     drawH: enemyDrawSize.h,
@@ -204,8 +242,8 @@ export function makeEnemyNpcEntity(enemyNpc, deps) {
 
       if (sx < -drawW || sx > VIEW_W || sy < -drawH || sy > VIEW_H) return;
 
-      const drawX = sx + Math.round((TILE_RENDER - drawW) / 2) + (enemyNpc.offsetX || 0);
-      const drawY = sy + TILE_RENDER - drawH + (enemyNpc.offsetY || 0);
+      const drawX = sx + Math.round((TILE_RENDER - drawW) / 2);
+      const drawY = sy + TILE_RENDER - drawH + (enemyNpc.drawOffsetY || 0);
 
       drawEnemy(
         {
@@ -216,7 +254,7 @@ export function makeEnemyNpcEntity(enemyNpc, deps) {
         },
         drawX,
         drawY,
-        drawW / 32
+        drawW / BASE_SPRITE_SIZE
       );
     },
   };
@@ -246,6 +284,9 @@ export function makeBossEntity(deps) {
     TILE_RENDER,
     BOSS_POS,
     BOSS_OFF,
+    BOSS_SC,
+    BOSS_HITBOX_WIDTH_RATIO,
+    BOSS_HITBOX_HEIGHT_RATIO,
     centeredBottomHitbox,
     drawEnemy,
     startBossBattle,
@@ -257,13 +298,13 @@ export function makeBossEntity(deps) {
     y: tileToPx(BOSS_POS.y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, 0.58, 0.42),
+    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, BOSS_HITBOX_WIDTH_RATIO, BOSS_HITBOX_HEIGHT_RATIO),
     blocking: true,
     update() {},
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawEnemy({ spriteKey: 'dark_knight' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'dark_knight' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, BOSS_SC);
       }
     },
     interact() {
@@ -278,6 +319,9 @@ export function makeForestBossEntity(deps) {
     TILE_RENDER,
     FOREST_BOSS_POS,
     BOSS_OFF,
+    BOSS_SC,
+    BOSS_HITBOX_WIDTH_RATIO,
+    BOSS_HITBOX_HEIGHT_RATIO,
     centeredBottomHitbox,
     drawEnemy,
     startForestBossBattle,
@@ -289,13 +333,13 @@ export function makeForestBossEntity(deps) {
     y: tileToPx(FOREST_BOSS_POS.y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, 0.58, 0.42),
+    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, BOSS_HITBOX_WIDTH_RATIO, BOSS_HITBOX_HEIGHT_RATIO),
     blocking: true,
     update() {},
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawEnemy({ spriteKey: 'jurei' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'jurei' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, BOSS_SC);
       }
     },
     interact() {
@@ -310,6 +354,9 @@ export function makeDemonGeneralEntity(deps) {
     TILE_RENDER,
     DEMON_GENERAL_POS,
     BOSS_OFF,
+    BOSS_SC,
+    BOSS_HITBOX_WIDTH_RATIO,
+    BOSS_HITBOX_HEIGHT_RATIO,
     centeredBottomHitbox,
     drawEnemy,
     startDemonGeneralBattle,
@@ -321,13 +368,13 @@ export function makeDemonGeneralEntity(deps) {
     y: tileToPx(DEMON_GENERAL_POS.y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, 0.58, 0.42),
+    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, BOSS_HITBOX_WIDTH_RATIO, BOSS_HITBOX_HEIGHT_RATIO),
     blocking: true,
     update() {},
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawEnemy({ spriteKey: 'demon_general' }, view.sx + BOSS_OFF.x - 30, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'demon_general' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, BOSS_SC);
       }
     },
     interact() {
@@ -342,6 +389,9 @@ export function makeDemonLordEntity(deps) {
     TILE_RENDER,
     CASTLE_BOSS_POS,
     BOSS_OFF,
+    BOSS_SC,
+    BOSS_HITBOX_WIDTH_RATIO,
+    BOSS_HITBOX_HEIGHT_RATIO,
     centeredBottomHitbox,
     drawEnemy,
     startDemonLordBattle,
@@ -353,13 +403,13 @@ export function makeDemonLordEntity(deps) {
     y: tileToPx(CASTLE_BOSS_POS.y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, 0.58, 0.42),
+    hitbox: centeredBottomHitbox(TILE_RENDER, TILE_RENDER, BOSS_HITBOX_WIDTH_RATIO, BOSS_HITBOX_HEIGHT_RATIO),
     blocking: true,
     update() {},
     draw() {
       const view = isOnScreenTileSprite(this.x, this.y, deps);
       if (view.visible) {
-        drawEnemy({ spriteKey: 'demon_lord' }, view.sx + BOSS_OFF.x - 30, view.sy + BOSS_OFF.y, 5);
+        drawEnemy({ spriteKey: 'demon_lord' }, view.sx + BOSS_OFF.x, view.sy + BOSS_OFF.y, BOSS_SC);
       }
     },
     interact() {
@@ -372,38 +422,24 @@ export function makeLeafaForestEntranceEntity(deps) {
   const {
     tileToPx,
     TILE_RENDER,
-    VIEW_W,
-    VIEW_H,
-    renderCamera,
     entranceHitbox,
-    drawObject,
     hero,
     executeMapTransition,
   } = deps;
 
   return {
     type: 'leafaForestEntrance',
-    x: tileToPx(2),
-    y: tileToPx(1),
-    w: TILE_RENDER,
+    x: tileToPx(24.5),
+    y: tileToPx(7),
+    w: TILE_RENDER * 2,
     h: TILE_RENDER,
     exitDir: 'up',
     transitionId: 'enterLeafaForest',
+    isEntrance: true,
     hitbox: entranceHitbox(TILE_RENDER, TILE_RENDER),
     blocking: false,
     update() {},
     draw() {
-      const bx = Math.round(this.x - renderCamera.col * TILE_RENDER);
-      const by = Math.round(this.y - renderCamera.row * TILE_RENDER);
-
-      if (bx <= -TILE_RENDER || bx >= VIEW_W || by <= -TILE_RENDER || by >= VIEW_H) return;
-
-      const drawW = 256;
-      const drawH = 320;
-      const drawX = bx + Math.round((TILE_RENDER - drawW) / 2);
-      const drawY = by + TILE_RENDER - drawH;
-
-      drawObject('forest_entrance', drawX, drawY, drawW, drawH, this);
     },
     interact() {
       if (hero.justExited > 0) return;
@@ -419,9 +455,7 @@ export function makeLeafaRescueEntity(deps) {
     VIEW_W,
     VIEW_H,
     renderCamera,
-    centeredBottomHitbox,
     LEAFA_RESCUE_POS,
-    NPC_OFF,
     NPC_SC,
     drawNPC,
     flags,
@@ -433,10 +467,10 @@ export function makeLeafaRescueEntity(deps) {
     name: 'リーファ',
     spriteKey: 'leafa_style',
     styleKey: 'leafa_style',
-    drawW: 100,
-    drawH: 100,
-    offsetX: +30,
-    offsetY: -20,
+    drawW: TILE_RENDER * 3,
+    drawH: TILE_RENDER * 3,
+    offsetX: 0,
+    offsetY: -12,
     bodyCol: '#44aa66',
     hairCol: '#99dd55',
     lines: [
@@ -451,14 +485,12 @@ export function makeLeafaRescueEntity(deps) {
     y: tileToPx(LEAFA_RESCUE_POS.y),
     w: TILE_RENDER,
     h: TILE_RENDER,
-    hitbox: centeredBottomHitbox(
-      TILE_RENDER,
-      TILE_RENDER,
-      0.55,
-      0.40,
-      preBattleNpc.offsetX || 0,
-      preBattleNpc.offsetY || 0
-    ),
+    hitbox: {
+      x: -Math.round(TILE_RENDER * 0.38),
+      y: Math.round(TILE_RENDER * 0.1),
+      w: Math.round(TILE_RENDER * 1.75),
+      h: TILE_RENDER,
+    },
     blocking: true,
     update() {},
     draw() {
@@ -466,9 +498,12 @@ export function makeLeafaRescueEntity(deps) {
       const by = Math.round(this.y - renderCamera.row * TILE_RENDER);
 
       if (bx > -TILE_RENDER && bx < VIEW_W && by > -TILE_RENDER && by < VIEW_H) {
+        const drawX = bx + Math.round((TILE_RENDER - preBattleNpc.drawW) / 2) + (preBattleNpc.offsetX || 0);
+        const drawY = by + TILE_RENDER - preBattleNpc.drawH + (preBattleNpc.offsetY || 0);
+
         drawNPC(
-          bx + NPC_OFF.x + (preBattleNpc.offsetX || 0),
-          by + NPC_OFF.y + (preBattleNpc.offsetY || 0),
+          drawX,
+          drawY,
           NPC_SC,
           '#44aa66',
           '#99dd55',
@@ -490,14 +525,61 @@ export function addDecorEntities(deps) {
     entities,
     getCurrentMapDef,
     makeDecorEntity,
+    makeEntranceEntity,
+    DECOR_DRAW_SIZES,
   } = deps;
 
   const add = (kind, x, y, size = 48, options = {}) => {
-    entities.push(makeDecorEntity(kind, x, y, size, options));
+    const normalizedOptions = { ...options };
+    let normalizedKind = kind;
+
+    if (normalizedKind === 'tree_large') {
+      normalizedKind = 'tree';
+      normalizedOptions.scale = normalizedOptions.scale || 1.2;
+    } else if (normalizedKind === 'tree_small') {
+      normalizedKind = 'tree';
+      normalizedOptions.scale = normalizedOptions.scale || 0.85;
+    }
+
+    if (normalizedKind === 'tree' || normalizedKind === 'tree_dark') {
+      const base = DECOR_DRAW_SIZES?.[normalizedKind] || DECOR_DRAW_SIZES?.tree || { w: 64, h: 96 };
+      const scale = Number.isFinite(normalizedOptions.scale) ? normalizedOptions.scale : 1;
+      normalizedOptions.scale = scale;
+      normalizedOptions.drawW = normalizedOptions.drawW || Math.round(base.w * scale);
+      normalizedOptions.drawH = normalizedOptions.drawH || Math.round(base.h * scale);
+      normalizedOptions.hitboxScale = scale;
+    }
+
+    const entity = makeDecorEntity(normalizedKind, x, y, size, normalizedOptions);
+    entities.push(entity);
+
+    if (options.entrance) {
+      const entrance = options.entrance;
+      entities.push(
+        makeEntranceEntity(
+          entrance.type || 'objectEntrance',
+          entity.x + entity.drawOriginOffsetX + entrance.x,
+          entity.y + entity.drawOriginOffsetY + entrance.y,
+          entrance.w,
+          entrance.h,
+          entrance.exitDir || 'up',
+          null,
+          {
+            transitionId: entrance.transitionId,
+            hitbox: { x: 0, y: 0, w: entrance.w, h: entrance.h },
+            allowedEntrySides: entrance.allowedEntrySides,
+          }
+        )
+      );
+    }
   };
 
   for (const decor of getCurrentMapDef().decorations || []) {
-    add(decor.kind, decor.x, decor.y, decor.size, decor.options || {});
+    add(decor.kind, decor.x, decor.y, decor.size, {
+      ...(decor.options || {}),
+      scale: Number.isFinite(decor.scale) ? decor.scale : decor.options?.scale,
+      flipX: decor.flipX ?? decor.options?.flipX,
+    });
   }
 }
 
@@ -548,6 +630,28 @@ export function makeDecorEntity(kind, x, y, size = 48, options = {}, deps) {
     TILE_RENDER,
   } = deps;
 
+  const drawW = options.drawW || null;
+  const drawH = options.drawH || null;
+  const offsetX = options.offsetX || 0;
+  const offsetY = options.offsetY || 0;
+  const drawOriginOffsetX = drawW ? Math.round((TILE_RENDER - drawW) / 2) + offsetX : 0;
+  const drawOriginOffsetY = drawH ? TILE_RENDER - drawH + offsetY : 0;
+  const hitboxScale = Number.isFinite(options.hitboxScale) ? options.hitboxScale : 1;
+  const toDrawRelativeHitbox = hitbox => {
+    const scaledX = Math.round(hitbox.x * hitboxScale);
+    const scaledY = Math.round(hitbox.y * hitboxScale);
+    const scaledW = Math.round(hitbox.w * hitboxScale);
+    const scaledH = Math.round(hitbox.h * hitboxScale);
+    const flippedX = drawW - Math.round((hitbox.x + hitbox.w) * hitboxScale);
+
+    return {
+      x: drawOriginOffsetX + (options.flipX === true && drawW ? flippedX : scaledX),
+      y: drawOriginOffsetY + scaledY,
+      w: scaledW,
+      h: scaledH,
+    };
+  };
+
   return {
     type: 'decor',
     kind,
@@ -556,12 +660,25 @@ export function makeDecorEntity(kind, x, y, size = 48, options = {}, deps) {
     w: TILE_RENDER,
     h: TILE_RENDER,
     size,
-    drawW: options.drawW || null,
-    drawH: options.drawH || null,
+    drawW,
+    drawH,
     scale: options.scale || null,
-    offsetX: options.offsetX || 0,
-    offsetY: options.offsetY || 0,
+    flipX: options.flipX === true,
+    offsetX,
+    offsetY,
+    drawOriginOffsetX,
+    drawOriginOffsetY,
+    hitbox: options.hitbox ? toDrawRelativeHitbox(options.hitbox) : resolveConfigurableHitbox(options, {
+      x: 0,
+      y: 0,
+      w: TILE_RENDER,
+      h: TILE_RENDER,
+    }),
+    hitboxes: options.hitboxes ? options.hitboxes.map(toDrawRelativeHitbox) : null,
     blocking: options.blocking === true,
+    walkable: options.walkable === true,
+    walkbox: options.walkbox ? toDrawRelativeHitbox(options.walkbox) : null,
+    ySortWithActors: options.ySortWithActors === true,
     update() {},
     draw() {},
   };
@@ -600,12 +717,35 @@ export function getGroundedTileDrawRect(entity, drawW, drawH, deps) {
   };
 }
 
-export function resolveEntityDrawSize(entityDef, defaultW, defaultH = defaultW) {
+function toTileRenderSize(value, TILE_RENDER) {
+  return Math.max(1, Math.round(value * TILE_RENDER / 128));
+}
+
+function scaleLegacyPixel(value, TILE_RENDER) {
+  return Math.round(value * TILE_RENDER / 128);
+}
+
+function resolveConfigurableHitbox(config = {}, fallback) {
+  return {
+    x: Number.isFinite(config.hitboxOffsetX) ? config.hitboxOffsetX : fallback.x,
+    y: Number.isFinite(config.hitboxOffsetY) ? config.hitboxOffsetY : fallback.y,
+    w: Number.isFinite(config.hitboxW) ? config.hitboxW : fallback.w,
+    h: Number.isFinite(config.hitboxH) ? config.hitboxH : fallback.h,
+  };
+}
+
+export function resolveEntityDrawSize(entityDef, defaultW, defaultH = defaultW, TILE_RENDER = 128) {
   const scale = Number.isFinite(entityDef.scale) ? entityDef.scale : 1;
+  const explicitW = Number.isFinite(entityDef.drawW)
+    ? toTileRenderSize(entityDef.drawW, TILE_RENDER)
+    : null;
+  const explicitH = Number.isFinite(entityDef.drawH)
+    ? toTileRenderSize(entityDef.drawH, TILE_RENDER)
+    : null;
 
   return {
-    w: entityDef.drawW || Math.round(defaultW * scale),
-    h: entityDef.drawH || Math.round(defaultH * scale),
+    w: explicitW ? Math.max(defaultW, explicitW) : Math.round(defaultW * scale),
+    h: explicitH ? Math.max(defaultH, explicitH) : Math.round(defaultH * scale),
   };
 }
 
@@ -614,6 +754,7 @@ export function makeEntranceEntity(type, x, y, w, h, exitDir, interact, options 
     hero,
     entranceHitbox,
     executeMapTransition,
+    getCollisionBox,
   } = deps;
 
   const transitionId = options.transitionId || null;
@@ -627,7 +768,11 @@ export function makeEntranceEntity(type, x, y, w, h, exitDir, interact, options 
     rect: { x, y, w, h },
     exitDir,
     transitionId,
-    hitbox: options.hitbox || entranceHitbox(w, h),
+    townExitSide: options.townExitSide || null,
+    westTownExitSide: options.westTownExitSide || null,
+    allowedEntrySides: options.allowedEntrySides || null,
+    isEntrance: true,
+    hitbox: options.hitbox || resolveConfigurableHitbox(options, entranceHitbox(w, h)),
     blocking: false,
     update() {},
     draw() {},
@@ -635,6 +780,19 @@ export function makeEntranceEntity(type, x, y, w, h, exitDir, interact, options 
       if (hero.justExited > 0) return;
 
       if (this.transitionId) {
+        const shouldResolveEntrySide = (
+          this.allowedEntrySides ||
+          this.transitionId === 'enterTown' ||
+          this.transitionId === 'enterWestTown'
+        );
+
+        if (shouldResolveEntrySide) {
+          const entrySide = getEntranceContactSide(hero, this, getCollisionBox);
+          this.entrySide = entrySide;
+          if (this.transitionId === 'enterTown') this.townEntrySide = entrySide;
+          if (this.transitionId === 'enterWestTown') this.westTownEntrySide = entrySide;
+          if (this.allowedEntrySides && !this.allowedEntrySides.includes(entrySide)) return;
+        }
         executeMapTransition(this.transitionId, this);
         return;
       }
@@ -644,6 +802,23 @@ export function makeEntranceEntity(type, x, y, w, h, exitDir, interact, options 
       }
     },
   };
+}
+
+function getEntranceContactSide(hero, entranceEntity, getCollisionBox) {
+  const heroBox = getCollisionBox(hero);
+  const entranceBox = getCollisionBox(entranceEntity);
+  const heroCenterX = heroBox.x + heroBox.w / 2;
+  const heroCenterY = heroBox.y + heroBox.h / 2;
+  const entranceCenterX = entranceBox.x + entranceBox.w / 2;
+  const entranceCenterY = entranceBox.y + entranceBox.h / 2;
+  const dx = heroCenterX - entranceCenterX;
+  const dy = heroCenterY - entranceCenterY;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx < 0 ? 'left' : 'right';
+  }
+
+  return dy < 0 ? 'up' : 'down';
 }
 
 export function makeEntranceFromDef(def, deps) {
@@ -713,29 +888,26 @@ export function makeHouseEntranceEntity(house, transitionId = null, deps) {
 export function makeHouseDoorRect(house, deps) {
   const {
     TILE_RENDER,
+    HOUSE_DOOR_HITBOX_WIDTH,
+    HOUSE_DOOR_HITBOX_HEIGHT,
     tileToPx,
   } = deps;
 
-  const w = Math.round(TILE_RENDER * 0.34);
-  const h = Math.round(TILE_RENDER * 0.30);
-  const doorOffsetX = 62;
+  const w = HOUSE_DOOR_HITBOX_WIDTH;
+  const h = HOUSE_DOOR_HITBOX_HEIGHT;
+  const drawW = toTileRenderSize(house.drawW || house.width, TILE_RENDER);
+  const drawH = toTileRenderSize(house.drawH || house.height, TILE_RENDER);
 
-  const drawW = house.drawW || house.width;
-  const drawH = house.drawH || house.height;
-
-  const normalizedHouse = {
-    x: house.drawW ? house.x : tileToPx(house.x),
-    y: house.drawH ? house.y : tileToPx(house.y) - drawH / 2,
-    drawW,
-    drawH,
-  };
-
-  const doorX = normalizedHouse.x;
-  const doorY = normalizedHouse.y + normalizedHouse.drawH / 2;
+  const tileX = house.drawW ? house.x : tileToPx(house.x);
+  const tileY = house.drawH ? house.y : tileToPx(house.y);
+  const houseX = tileX + Math.round((TILE_RENDER - drawW) / 2);
+  const houseY = tileY - drawH;
+  const doorX = houseX + drawW / 2;
+  const doorY = houseY + drawH;
 
   return {
-    x: Math.round(doorX - w / 2 + doorOffsetX),
-    y: Math.round(doorY - h / 2 - 4),
+    x: Math.round(doorX - w / 2),
+    y: Math.round(doorY - h),
     w,
     h,
     exitDir: 'down',
@@ -888,7 +1060,7 @@ export function drawEntities(deps) {
   }
 
   for (const entity of sorted) {
-    if (entity.type === 'decor') {
+    if (entity.type === 'decor' && entity.ySortWithActors !== true) {
       drawDecorEntity(entity);
     }
   }
@@ -906,11 +1078,16 @@ export function drawEntities(deps) {
   }
 
   for (const entity of sorted) {
-    if (entity.type === 'decor' || entity.type === 'house' || entity.type === 'chest') {
+    if ((entity.type === 'decor' && entity.ySortWithActors !== true) || entity.type === 'house' || entity.type === 'chest') {
       continue;
     }
 
     if (entity.type === 'sign') {
+      continue;
+    }
+
+    if (entity.type === 'decor') {
+      drawDecorEntity(entity);
       continue;
     }
 

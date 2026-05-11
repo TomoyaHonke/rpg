@@ -114,20 +114,20 @@ export function resetRuntimeStateForNewGame(deps) {
   } = deps;
 
   runtimeState.townReturn = {
-    x: tileToPx(10),
-    y: tileToPx(2),
+    x: tileToPx(17),
+    y: tileToPx(11),
     exitDir: 'down',
   };
 
   runtimeState.dungeonReturn = {
-    x: tileToPx(13),
-    y: tileToPx(8),
+    x: tileToPx(52),
+    y: tileToPx(32),
     exitDir: 'up',
   };
 
   runtimeState.field2Return = {
-    x: tileToPx(2),
-    y: tileToPx(10),
+    x: tileToPx(8),
+    y: tileToPx(40),
     exitDir: 'up',
   };
 
@@ -157,6 +157,12 @@ export function resetRuntimeStateForNewGame(deps) {
   runtimeState.castleReturn = {
     x: tileToPx(12),
     y: tileToPx(1),
+    exitDir: 'down',
+  };
+
+  runtimeState.westTownReturn = {
+    x: tileToPx(6),
+    y: tileToPx(25),
     exitDir: 'down',
   };
 }

@@ -39,6 +39,8 @@ export function getCurrentMapId(deps) {
     outpostMap,
     castleMap,
     leafaForestMap,
+    ruinedCityMap,
+    westTownMap,
     isHouseMap,
   } = deps;
 
@@ -50,6 +52,8 @@ export function getCurrentMapId(deps) {
   if (runtimeState.currentMap === outpostMap) return 'outpost';
   if (runtimeState.currentMap === castleMap) return 'castle';
   if (runtimeState.currentMap === leafaForestMap) return 'leafaForest';
+  if (runtimeState.currentMap === ruinedCityMap) return 'ruinedCity';
+  if (runtimeState.currentMap === westTownMap) return 'westTown';
 
   if (isHouseMap(runtimeState.currentMap)) {
     return `house:${runtimeState.currentHouseId || 'unknown'}`;

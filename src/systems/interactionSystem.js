@@ -30,6 +30,9 @@ export function getEventEntityForBox(box, deps) {
     'castleExit',
     'leafaForestEntrance',
     'leafaForestExit',
+    'ruinsExit',
+    'westTownExit',
+    'objectEntrance',
   ];
 
   const tileBasedEventTypes = [
@@ -49,6 +52,8 @@ export function getEventEntityForBox(box, deps) {
     'castleExit',
     'leafaForestEntrance',
     'leafaForestExit',
+    'ruinsExit',
+    'westTownExit',
   ];
 
   const directionalEntranceTypes = ['dungeonEntrance'];
@@ -112,19 +117,35 @@ export function getBlockingEntityForBox(box, deps) {
 
   return entities.find(entity => {
     if (entity.type === 'hero' || !entity.blocking) return false;
+    if (Array.isArray(entity.hitboxes)) {
+      return entity.hitboxes.some(hitbox => isColliding(box, {
+        x: entity.x + hitbox.x,
+        y: entity.y + hitbox.y,
+        w: hitbox.w,
+        h: hitbox.h,
+      }));
+    }
     return isColliding(box, getCollisionBox(entity));
   }) || null;
 }
 
 export function setupHeroEntity(hero, deps) {
   const {
-    centeredBottomHitbox,
+    PLAYER_HITBOX_WIDTH,
+    PLAYER_HITBOX_HEIGHT,
+    PLAYER_HITBOX_OFFSET_X,
+    PLAYER_HITBOX_OFFSET_Y,
     updateMove,
     drawHeroEntity,
   } = deps;
 
   hero.type = 'hero';
-  hero.hitbox = centeredBottomHitbox(hero.w, hero.h);
+  hero.hitbox = {
+    x: PLAYER_HITBOX_OFFSET_X,
+    y: PLAYER_HITBOX_OFFSET_Y,
+    w: PLAYER_HITBOX_WIDTH,
+    h: PLAYER_HITBOX_HEIGHT,
+  };
   hero.update = updateMove;
   hero.draw = drawHeroEntity;
   hero.interact = function() {};

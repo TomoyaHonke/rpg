@@ -55,6 +55,7 @@ export function createSaveData(deps) {
       cursedForest: runtimeState.cursedForestReturn,
       outpost: runtimeState.outpostReturn,
       castle: runtimeState.castleReturn,
+      westTown: runtimeState.westTownReturn,
     },
 
     houseId: runtimeState.currentHouseId,
@@ -238,6 +239,10 @@ export function restoreReturnPointsFromSave(data, deps) {
 
     if (data.returns.castle) {
       runtimeState.castleReturn = normalizeSavedPoint(data.returns.castle, runtimeState.castleReturn);
+    }
+
+    if (data.returns.westTown) {
+      runtimeState.westTownReturn = normalizeSavedPoint(data.returns.westTown, runtimeState.westTownReturn);
     }
 
     return;

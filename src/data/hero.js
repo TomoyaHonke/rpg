@@ -1,6 +1,10 @@
 import {
   TILE_RENDER,
   HERO_WALK_IDLE_FRAME,
+  PLAYER_HITBOX_WIDTH,
+  PLAYER_HITBOX_HEIGHT,
+  PLAYER_HITBOX_OFFSET_X,
+  PLAYER_HITBOX_OFFSET_Y,
 } from '../core/constants.js';
 
 function tileToPx(n) {
@@ -12,6 +16,12 @@ export const hero = {
   y: tileToPx(7),
   w: TILE_RENDER,
   h: TILE_RENDER,
+  hitbox: {
+    x: PLAYER_HITBOX_OFFSET_X,
+    y: PLAYER_HITBOX_OFFSET_Y,
+    w: PLAYER_HITBOX_WIDTH,
+    h: PLAYER_HITBOX_HEIGHT,
+  },
   drawX: tileToPx(6),
   drawY: tileToPx(7),
   vx: 0,
